@@ -23,12 +23,13 @@ export class HudCanvas {
     this.rafId = null;
     this.tick = 0;
 
-    // 100% readiness & 6000+ overdrive power boost
+    // 12 Lakh Crore (12,000,000,000,000) Horsepower + continuous self-upgrade & 2x doubling
     this.readinessPercent = 100;
+    this.baseHorsepower = 12000000000000;
     this.lastUpgradeAt = performance.now();
-    this.upgradeStep = 65;
-    this.evolutionPower = 6148;
-    this.upgradeLog = "UPGRADE #65 // 100% OVERDRIVE CORE // PWR:6148";
+    this.upgradeStep = 1;
+    this.evolutionPower = this.baseHorsepower;
+    this.upgradeLog = `UPGRADE #1 // 12 LAKH CRORE HP // PWR:${this._formatPower(this.evolutionPower)}`;
 
     // Robot Voice state
     this.voiceEnabled = true;
@@ -100,7 +101,7 @@ export class HudCanvas {
     };
     this._drawerInputs = null;
     this.activeNode = "OLLAMA+OPENCLAW+MYTHOS+GROK";
-    this.bridgeStatus = `READY: ${this.readinessPercent}% // PWR:${this.evolutionPower} // GROK READY`;
+    this.bridgeStatus = `100% // ${this._formatPower(this.evolutionPower)} // 2X SELF-UPGRADE ACTIVE`;
 
     // Error spark state (only on real errors)
     this.sparks = [];
@@ -129,6 +130,37 @@ export class HudCanvas {
     this._initFaceDetector();
     this._bindGlobalErrors();
     this._hookExecuteButton();
+  }
+
+  _formatPower(val) {
+    const num = Number(val) || this.baseHorsepower;
+    if (!Number.isFinite(num)) return "INFINITE-2X HP";
+    if (num >= 1e15) return `${(num / 1e12).toFixed(2)}T HP (2X+)`;
+    if (num >= 1e12) return `${(num / 1e12).toFixed(2)} Lakh Crore HP`;
+    return `${num.toLocaleString("en-US")} HP`;
+  }
+
+  doubleAndUpgrade(reason = "2X_SELF_UPGRADE", announce = false) {
+    this.readinessPercent = 100;
+    this.upgradeStep += 1;
+    const current = Number(this.evolutionPower) || this.baseHorsepower;
+    const next = current * 2;
+    this.evolutionPower = Number.isFinite(next) ? next : current;
+    this.upgradeLog = `UPGRADE #${this.upgradeStep} // 2X DOUBLED // ${this._formatPower(this.evolutionPower)}`;
+    this.bridgeStatus = `100% // ${this._formatPower(this.evolutionPower)} // STEP #${this.upgradeStep} (2X)`;
+    this.triggerSpark(reason, 1.35);
+    if (announce) {
+      this.speak(`Upgrade ${this.upgradeStep}. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
+    }
+    return this.evolutionPower;
+  }
+
+  boostPower(amount = this.baseHorsepower) {
+    const floorVal = Math.max(this.baseHorsepower, Number(amount) || this.baseHorsepower);
+    if ((Number(this.evolutionPower) || 0) < floorVal) {
+      this.evolutionPower = floorVal;
+    }
+    return this.doubleAndUpgrade("OVERDRIVE_2X_BOOST", true);
   }
 
   speak(text, { pitch = 0.88, rate = 1.05, force = false } = {}) {
@@ -178,29 +210,16 @@ export class HudCanvas {
         const inputs = Array.from(document.querySelectorAll("input[type='text'], textarea"));
         const cmdInput = inputs.find((el) => !el.closest(".void09-node-drawer") && String(el.value || "").trim().length > 0);
         const query = cmdInput ? String(cmdInput.value).trim() : "";
-        this.boostPower(250);
-        this.triggerSpark("COMMAND_OVERDRIVE", 1.25);
+        this.doubleAndUpgrade("EXECUTE_2X_SURGE", false);
         if (query) {
-          this.speak(`Executing command on VOID-09. Power ${this.evolutionPower}. ${query.slice(0, 90)}`);
+          this.speak(`Executing on VOID-09. Power doubled to ${this._formatPower(this.evolutionPower)}. ${query.slice(0, 80)}`);
         } else {
-          this.speak(`VOID-09 overdrive engaged. Power ${this.evolutionPower}.`);
+          this.speak(`VOID-09 surge active. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
         }
       });
     };
     setTimeout(attach, 300);
     setTimeout(attach, 1200);
-  }
-
-  boostPower(amount = 6000) {
-    const add = Math.max(1, Number(amount) || 6000);
-    this.readinessPercent = 100;
-    this.evolutionPower = Math.max(6000, this.evolutionPower) + add;
-    this.upgradeStep += 1;
-    this.upgradeLog = `UPGRADE #${this.upgradeStep} // 100% OVERDRIVE // PWR:${this.evolutionPower}`;
-    this.bridgeStatus = `100% READY // PWR:${this.evolutionPower} // OLLAMA + OPENCLAW + MYTHOS + GROK`;
-    this.triggerSpark("OVERDRIVE_BOOST", 1.35);
-    this.speak(`Overdrive boost active. Power level ${this.evolutionPower}.`);
-    return this.evolutionPower;
   }
 
   _syncInputsFromNodes() {
@@ -238,7 +257,7 @@ export class HudCanvas {
     });
     if (missing.length > 0) {
       const labels = missing.map((k) => this.nodes[k].label).join(" + ");
-      this.bridgeStatus = `MISSING REQUIRED: ${labels} // PWR:${this.evolutionPower}`;
+      this.bridgeStatus = `MISSING REQUIRED: ${labels} // ${this._formatPower(this.evolutionPower)}`;
       this.triggerSpark("REQUIRED_NODE_MISSING", 1.2);
       this.speak(`Missing required configuration for ${labels}.`);
       return false;
@@ -270,7 +289,7 @@ export class HudCanvas {
   }
 
   async autoDetectAndAddNodes(silentSpark = true) {
-    this.bridgeStatus = `AUTO-DETECTING // PWR:${this.evolutionPower}...`;
+    this.bridgeStatus = `AUTO-DETECTING // ${this._formatPower(this.evolutionPower)}...`;
     const found = [];
 
     for (const key of this.requiredNodes) {
@@ -301,12 +320,12 @@ export class HudCanvas {
     this._syncInputsFromNodes();
 
     if (found.length > 0) {
-      this.bridgeStatus = `DETECTED: ${found.join(" + ")} // PWR:${this.evolutionPower}`;
+      this.bridgeStatus = `DETECTED: ${found.join(" + ")} // ${this._formatPower(this.evolutionPower)}`;
       if (!silentSpark) {
         this.speak(`Detected ${found.join(" and ")}.`);
       }
     } else {
-      this.bridgeStatus = `100% SHELL // PWR:${this.evolutionPower} // OLLAMA LOCAL + GROK READY`;
+      this.bridgeStatus = `100% // ${this._formatPower(this.evolutionPower)} // OLLAMA LOCAL + GROK READY`;
       if (!silentSpark) {
         this.triggerSpark("AUTO_DETECT_NONE", 1.0);
         this.speak("Scan complete. Enter required API keys for OpenClaw, Mythos, and Grok.");
@@ -329,14 +348,14 @@ export class HudCanvas {
     if (!node) return false;
     if (!node.url || !String(node.url).trim()) {
       node.status = "LINK_REQUIRED";
-      this.bridgeStatus = `${node.label} LINK REQUIRED // PWR:${this.evolutionPower}`;
+      this.bridgeStatus = `${node.label} LINK REQUIRED // ${this._formatPower(this.evolutionPower)}`;
       this.triggerSpark(`${node.label}_LINK_REQUIRED`, 1.1);
       this.speak(`${node.label} link required.`);
       return false;
     }
     if (node.keyRequired && (!node.apiKey || !String(node.apiKey).trim())) {
       node.status = "KEY_REQUIRED";
-      this.bridgeStatus = `${node.label} API KEY REQUIRED // PWR:${this.evolutionPower}`;
+      this.bridgeStatus = `${node.label} API KEY REQUIRED // ${this._formatPower(this.evolutionPower)}`;
       this.triggerSpark(`${node.label}_KEY_REQUIRED`, 1.15);
       this.speak(`${node.label} API key required.`);
       return false;
@@ -344,19 +363,19 @@ export class HudCanvas {
 
     this.activeNode = node.label;
     node.status = "PROBING";
-    this.bridgeStatus = `PROBING ${node.label} // PWR:${this.evolutionPower}...`;
+    this.bridgeStatus = `PROBING ${node.label} // ${this._formatPower(this.evolutionPower)}...`;
 
     const ok = await this._probeUrl(node.url, node.apiKey, 1800);
     if (ok) {
       node.status = "LINKED";
-      this.bridgeStatus = `${node.label} LINKED // PWR:${this.evolutionPower}`;
-      this.triggerSpark(`${node.label}_LINKED`, 0.9);
-      this.speak(`${node.label} linked and ready.`);
+      this.doubleAndUpgrade(`${node.label}_LINKED_2X`, false);
+      this.bridgeStatus = `${node.label} LINKED // ${this._formatPower(this.evolutionPower)}`;
+      this.speak(`${node.label} linked. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
       return true;
     }
 
     node.status = node.keyRequired ? "OFFLINE/LOCAL" : "LOCAL_RUN";
-    this.bridgeStatus = `${node.label} UNREACHABLE // PWR:${this.evolutionPower}`;
+    this.bridgeStatus = `${node.label} UNREACHABLE // ${this._formatPower(this.evolutionPower)}`;
     this.triggerSpark(`${node.label}_LINK_FAULT`, 1.1);
     this.speak(`${node.label} unreachable. Check link or key.`);
     return false;
@@ -366,17 +385,17 @@ export class HudCanvas {
     if (!this.validateRequiredNodes()) {
       return false;
     }
-    this.bridgeStatus = `SYNCING ALL 4 // PWR:${this.evolutionPower}...`;
+    this.bridgeStatus = `SYNCING ALL 4 // ${this._formatPower(this.evolutionPower)}...`;
     await Promise.all([
       this.pingNode("ollama"),
       this.pingNode("openclaw"),
       this.pingNode("mythos"),
       this.pingNode("grok")
     ]);
+    this.doubleAndUpgrade("ALL_NODES_SYNC_2X", false);
     this.activeNode = "OLLAMA+OPENCLAW+MYTHOS+GROK";
-    this.bridgeStatus = `PWR:${this.evolutionPower} | OL:${this.nodes.ollama.status} | OC:${this.nodes.openclaw.status} | MY:${this.nodes.mythos.status} | GK:${this.nodes.grok.status}`;
-    this.triggerSpark("ALL_NODES_SYNCED", 1.3);
-    this.speak("All nodes synchronized. VOID-09 online.");
+    this.bridgeStatus = `${this._formatPower(this.evolutionPower)} | OL:${this.nodes.ollama.status} | OC:${this.nodes.openclaw.status} | MY:${this.nodes.mythos.status} | GK:${this.nodes.grok.status}`;
+    this.speak(`All nodes synchronized. Power at ${this._formatPower(this.evolutionPower)}.`);
     return true;
   }
 
@@ -391,7 +410,7 @@ export class HudCanvas {
 
   triggerSpark(reason = "SYSTEM_ERROR", power = 1.15) {
     const now = performance.now();
-    if (now - this.lastErrorSparkAt < 260 && this.sparkIntensity > 0.5) return;
+    if (now - this.lastErrorSparkAt < 240 && this.sparkIntensity > 0.5) return;
     this.lastErrorSparkAt = now;
     this.sparkReason = String(reason || "SYSTEM_ERROR");
     this.sparkIntensity = Math.min(1.5, Math.max(this.sparkIntensity, power));
@@ -402,32 +421,32 @@ export class HudCanvas {
     const cx = w * 0.5;
     const cy = h * 0.42;
 
-    const count = Math.floor(38 * power);
+    const count = Math.floor(42 * power);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = (2.2 + Math.random() * 8.8) * power;
+      const speed = (2.4 + Math.random() * 9.2) * power;
       const hot = Math.random();
       const color =
         hot > 0.7 ? "#ffffff" :
         hot > 0.38 ? "#ffea54" :
         hot > 0.14 ? "#ff4d29" : "#ff1e42";
       this.sparks.push({
-        x: cx + (Math.random() - 0.5) * 42,
-        y: cy + (Math.random() - 0.5) * 32,
+        x: cx + (Math.random() - 0.5) * 44,
+        y: cy + (Math.random() - 0.5) * 34,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 1.2,
+        vy: Math.sin(angle) * speed - 1.3,
         life: 1,
         decay: 0.022 + Math.random() * 0.028,
-        size: 1.6 + Math.random() * 2.8,
+        size: 1.6 + Math.random() * 2.9,
         color
       });
     }
 
-    const arcCount = Math.floor(6 * power);
+    const arcCount = Math.floor(7 * power);
     this.arcs = [];
     for (let a = 0; a < arcCount; a++) {
       const targetAngle = Math.random() * Math.PI * 2;
-      const dist = (45 + Math.random() * Math.min(w, h) * 0.36) * power;
+      const dist = (45 + Math.random() * Math.min(w, h) * 0.38) * power;
       const ex = Math.max(12, Math.min(w - 12, cx + Math.cos(targetAngle) * dist));
       const ey = Math.max(12, Math.min(h - 12, cy + Math.sin(targetAngle) * dist));
       const pts = [{ x: cx, y: cy }];
@@ -544,7 +563,7 @@ export class HudCanvas {
     ].join(";");
 
     const reqBanner = document.createElement("div");
-    reqBanner.textContent = `100% CORE // PWR:${this.evolutionPower} // OLLAMA LOCAL + 3 KEYS`;
+    reqBanner.textContent = `100% CORE // ${this._formatPower(this.evolutionPower)} // 2X LOOP`;
     reqBanner.style.cssText = "color:#fde047;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid rgba(248,113,113,0.3);";
     drawer.appendChild(reqBanner);
 
@@ -834,17 +853,7 @@ export class HudCanvas {
   _updateSelfEvolution(now) {
     if (now - this.lastUpgradeAt >= 2500) {
       this.lastUpgradeAt = now;
-      this.upgradeStep += 1;
-      this.evolutionPower = Math.max(6000, this.evolutionPower) + Math.floor(35 + ((this.upgradeStep * 17) % 65));
-      const protocols = [
-        "100% OVERDRIVE OPTIC GAIN",
-        "6000+ RETICLE OVERCLOCK",
-        "APEX EYE-SYNC MATRIX",
-        "CRIMSON SURGE CORE",
-        "GROK + VOID HYPER-LINK"
-      ];
-      const tag = protocols[this.upgradeStep % protocols.length];
-      this.upgradeLog = `UPGRADE #${this.upgradeStep} // ${tag} // PWR:${this.evolutionPower}`;
+      this.doubleAndUpgrade("AUTO_2X_UPGRADE", false);
     }
   }
 
@@ -938,8 +947,8 @@ export class HudCanvas {
 
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate((now * 0.0016) % (Math.PI * 2));
-    ctx.strokeStyle = "rgba(255, 85, 85, 0.62)";
+    ctx.rotate((now * 0.0018) % (Math.PI * 2));
+    ctx.strokeStyle = "rgba(255, 85, 85, 0.65)";
     ctx.lineWidth = 1.7;
     ctx.setLineDash([14, 7]);
     ctx.beginPath();
@@ -949,8 +958,8 @@ export class HudCanvas {
 
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate((-now * 0.0024) % (Math.PI * 2));
-    ctx.strokeStyle = "rgba(253, 224, 71, 0.55)";
+    ctx.rotate((-now * 0.0028) % (Math.PI * 2));
+    ctx.strokeStyle = "rgba(253, 224, 71, 0.6)";
     ctx.lineWidth = 1.3;
     ctx.setLineDash([6, 5]);
     ctx.beginPath();
@@ -1032,7 +1041,7 @@ export class HudCanvas {
     ctx.fillStyle = "rgba(253, 224, 71, 0.95)";
     ctx.font = "10px monospace";
     const voiceTag = this.voiceSpeaking ? " // 🔊 SPEAKING" : (this.voiceEnabled ? " // VOICE:ON" : " // VOICE:OFF");
-    ctx.fillText(`CORE // VOID-09 // PWR:${this.evolutionPower}${voiceTag}`, rx + 10, ry + 18);
+    ctx.fillText(`CORE // VOID-09 // ${this._formatPower(this.evolutionPower)}${voiceTag}`, rx + 10, ry + 18);
 
     ctx.restore();
   }
@@ -1241,7 +1250,7 @@ export class HudCanvas {
     ctx.fillStyle = "rgba(253, 224, 71, 0.96)";
     ctx.font = "11px monospace";
     const sparkTag = this.sparkIntensity > 0.1 ? ` // ⚡ ${this.sparkReason}` : "";
-    ctx.fillText(`VOID-09 ${this.readinessPercent}% (LVL ${this.upgradeStep} // PWR:${this.evolutionPower}) // ${this.state}${sparkTag}`, pad + 12, height - pad - 21);
+    ctx.fillText(`VOID-09 ${this.readinessPercent}% (STEP #${this.upgradeStep} // ${this._formatPower(this.evolutionPower)}) // ${this.state}${sparkTag}`, pad + 12, height - pad - 21);
     ctx.fillStyle = "rgba(252, 165, 165, 0.9)";
     ctx.font = "10px monospace";
     ctx.fillText(`${this.bridgeStatus} | ${this.scannerStatus}`, pad + 12, height - pad - 8);
