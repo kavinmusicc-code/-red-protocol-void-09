@@ -23,11 +23,12 @@ export class HudCanvas {
     this.rafId = null;
     this.tick = 0;
 
-    // Continuous self-upgrade state (+5 levels boost to LVL 15 / v2.5)
+    // 100% readiness & 6000+ overdrive power boost
+    this.readinessPercent = 100;
     this.lastUpgradeAt = performance.now();
-    this.upgradeStep = 15;
-    this.evolutionPower = 148;
-    this.upgradeLog = "UPGRADE #15 // OVERDRIVE CORE BOOST (+5 LVL) // PWR:148";
+    this.upgradeStep = 65;
+    this.evolutionPower = 6148;
+    this.upgradeLog = "UPGRADE #65 // 100% OVERDRIVE CORE // PWR:6148";
 
     // Ollama runs locally without API key; OpenClaw & Mythos each take a single user key
     this.requiredNodes = ["ollama", "openclaw", "mythos"];
@@ -81,7 +82,7 @@ export class HudCanvas {
     };
     this._drawerInputs = null;
     this.activeNode = "OLLAMA+OPENCLAW+MYTHOS";
-    this.bridgeStatus = "OLLAMA LOCAL (NO KEY) // OPENCLAW + MYTHOS KEY REQUIRED";
+    this.bridgeStatus = `READY: ${this.readinessPercent}% // PWR:${this.evolutionPower}`;
 
     // Error spark state (only on real errors)
     this.sparks = [];
@@ -109,6 +110,16 @@ export class HudCanvas {
     this._createScannerControls();
     this._initFaceDetector();
     this._bindGlobalErrors();
+  }
+
+  boostPower(amount = 6000) {
+    const add = Math.max(1, Number(amount) || 6000);
+    this.readinessPercent = 100;
+    this.evolutionPower = Math.max(6000, this.evolutionPower) + add;
+    this.upgradeStep += 1;
+    this.upgradeLog = `UPGRADE #${this.upgradeStep} // 100% OVERDRIVE // PWR:${this.evolutionPower}`;
+    this.bridgeStatus = `100% READY // PWR:${this.evolutionPower} // OLLAMA LOCAL + OPENCLAW + MYTHOS`;
+    return this.evolutionPower;
   }
 
   _syncInputsFromNodes() {
@@ -139,14 +150,14 @@ export class HudCanvas {
     this.requiredNodes.forEach((key) => {
       const node = this.nodes[key];
       const hasUrl = node.url && String(node.url).trim().length > 0;
-      const hasKey = !node.keyRequired || (node.apiKey && String(node.apiKey).trim().length > 0);
+      const hasKey = !node.keyRequired || (node && node.apiKey && String(node.apiKey).trim().length > 0);
       if (!hasUrl) node.status = "LINK_REQUIRED";
       else if (!hasKey) node.status = "KEY_REQUIRED";
       else if (!node.keyRequired) node.status = "LOCAL_READY";
     });
     if (missing.length > 0) {
       const labels = missing.map((k) => this.nodes[k].label).join(" + ");
-      this.bridgeStatus = `MISSING REQUIRED: ${labels}`;
+      this.bridgeStatus = `MISSING REQUIRED: ${labels} // PWR:${this.evolutionPower}`;
       this.triggerSpark("REQUIRED_NODE_MISSING", 1.2);
       return false;
     }
@@ -177,7 +188,7 @@ export class HudCanvas {
   }
 
   async autoDetectAndAddNodes(silentSpark = true) {
-    this.bridgeStatus = "AUTO-DETECTING OLLAMA (LOCAL) + OPENCLAW + MYTHOS...";
+    this.bridgeStatus = `AUTO-DETECTING // PWR:${this.evolutionPower}...`;
     const found = [];
 
     for (const key of this.requiredNodes) {
@@ -208,9 +219,9 @@ export class HudCanvas {
     this._syncInputsFromNodes();
 
     if (found.length > 0) {
-      this.bridgeStatus = `DETECTED: ${found.join(" + ")} // OLLAMA LOCAL READY`;
+      this.bridgeStatus = `DETECTED: ${found.join(" + ")} // PWR:${this.evolutionPower}`;
     } else {
-      this.bridgeStatus = "OLLAMA LOCAL READY // ADD OPENCLAW & MYTHOS KEYS";
+      this.bridgeStatus = `100% SHELL // PWR:${this.evolutionPower} // OLLAMA LOCAL READY`;
       if (!silentSpark) {
         this.triggerSpark("AUTO_DETECT_NONE", 1.0);
       }
@@ -232,30 +243,30 @@ export class HudCanvas {
     if (!node) return false;
     if (!node.url || !String(node.url).trim()) {
       node.status = "LINK_REQUIRED";
-      this.bridgeStatus = `${node.label} LINK REQUIRED`;
+      this.bridgeStatus = `${node.label} LINK REQUIRED // PWR:${this.evolutionPower}`;
       this.triggerSpark(`${node.label}_LINK_REQUIRED`, 1.1);
       return false;
     }
     if (node.keyRequired && (!node.apiKey || !String(node.apiKey).trim())) {
       node.status = "KEY_REQUIRED";
-      this.bridgeStatus = `${node.label} API KEY REQUIRED`;
+      this.bridgeStatus = `${node.label} API KEY REQUIRED // PWR:${this.evolutionPower}`;
       this.triggerSpark(`${node.label}_KEY_REQUIRED`, 1.15);
       return false;
     }
 
     this.activeNode = node.label;
     node.status = "PROBING";
-    this.bridgeStatus = `PROBING ${node.label}...`;
+    this.bridgeStatus = `PROBING ${node.label} // PWR:${this.evolutionPower}...`;
 
     const ok = await this._probeUrl(node.url, node.apiKey, 1800);
     if (ok) {
       node.status = "LINKED";
-      this.bridgeStatus = `${node.label} LINKED // READY`;
+      this.bridgeStatus = `${node.label} LINKED // PWR:${this.evolutionPower}`;
       return true;
     }
 
     node.status = node.keyRequired ? "OFFLINE/LOCAL" : "LOCAL_RUN";
-    this.bridgeStatus = `${node.label} UNREACHABLE (CHECK LINK / CORS)`;
+    this.bridgeStatus = `${node.label} UNREACHABLE // PWR:${this.evolutionPower}`;
     this.triggerSpark(`${node.label}_LINK_FAULT`, 1.1);
     return false;
   }
@@ -264,14 +275,14 @@ export class HudCanvas {
     if (!this.validateRequiredNodes()) {
       return false;
     }
-    this.bridgeStatus = "SYNCING OLLAMA (LOCAL) + OPENCLAW + MYTHOS...";
+    this.bridgeStatus = `SYNCING ALL 3 // PWR:${this.evolutionPower}...`;
     await Promise.all([
       this.pingNode("ollama"),
       this.pingNode("openclaw"),
       this.pingNode("mythos")
     ]);
     this.activeNode = "OLLAMA+OPENCLAW+MYTHOS";
-    this.bridgeStatus = `OL:${this.nodes.ollama.status} | OC:${this.nodes.openclaw.status} | MY:${this.nodes.mythos.status}`;
+    this.bridgeStatus = `PWR:${this.evolutionPower} | OL:${this.nodes.ollama.status} | OC:${this.nodes.openclaw.status} | MY:${this.nodes.mythos.status}`;
     return true;
   }
 
@@ -416,7 +427,7 @@ export class HudCanvas {
     ].join(";");
 
     const reqBanner = document.createElement("div");
-    reqBanner.textContent = "OLLAMA: LOCAL (NO KEY) | OPENCLAW & MYTHOS: 1 KEY EACH";
+    reqBanner.textContent = `100% CORE // PWR:${this.evolutionPower} // OLLAMA LOCAL + 2 KEYS`;
     reqBanner.style.cssText = "color:#fca5a5;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid rgba(248,113,113,0.25);";
     drawer.appendChild(reqBanner);
 
@@ -705,10 +716,10 @@ export class HudCanvas {
     if (now - this.lastUpgradeAt >= 2500) {
       this.lastUpgradeAt = now;
       this.upgradeStep += 1;
-      this.evolutionPower = Math.min(999, this.evolutionPower + Math.floor(6 + ((this.upgradeStep * 3) % 9)));
+      this.evolutionPower = Math.max(6000, this.evolutionPower) + Math.floor(25 + ((this.upgradeStep * 13) % 45));
       const protocols = [
-        "OVERDRIVE OPTIC GAIN",
-        "TIER-2 RETICLE OVERCLOCK",
+        "100% OVERDRIVE OPTIC GAIN",
+        "6000+ RETICLE OVERCLOCK",
         "APEX EYE-SYNC MATRIX",
         "CRIMSON SURGE CORE",
         "PREDATOR VECTOR BOOST"
@@ -901,7 +912,7 @@ export class HudCanvas {
 
     ctx.fillStyle = "rgba(252, 165, 165, 0.9)";
     ctx.font = "10px monospace";
-    ctx.fillText(`CORE // VOID-09 // LVL ${this.upgradeStep}`, rx + 10, ry + 18);
+    ctx.fillText(`CORE // VOID-09 // LVL ${this.upgradeStep} // PWR:${this.evolutionPower}`, rx + 10, ry + 18);
 
     ctx.restore();
   }
@@ -1112,7 +1123,7 @@ export class HudCanvas {
     ctx.fillStyle = "rgba(252, 165, 165, 0.95)";
     ctx.font = "11px monospace";
     const sparkTag = this.sparkIntensity > 0.1 ? ` // ⚡ ${this.sparkReason}` : "";
-    ctx.fillText(`VOID-09 v${(1 + this.upgradeStep * 0.1).toFixed(1)} (LVL ${this.upgradeStep}) // ${this.state}${sparkTag}`, pad + 12, height - pad - 21);
+    ctx.fillText(`VOID-09 ${this.readinessPercent}% (LVL ${this.upgradeStep} // PWR:${this.evolutionPower}) // ${this.state}${sparkTag}`, pad + 12, height - pad - 21);
     ctx.fillStyle = "rgba(248, 113, 113, 0.85)";
     ctx.font = "10px monospace";
     ctx.fillText(`${this.bridgeStatus} | ${this.scannerStatus}`, pad + 12, height - pad - 8);
