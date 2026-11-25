@@ -39,12 +39,12 @@ export class HudCanvas {
 
     // Live Face & Eye Scanner state
     this.scannerActive = false;
-    this.scannerStatus = "STANDBY // CLICK [SCAN FACE & EYES]";
+    this.scannerStatus = "CAM STANDBY // CLICK [SCAN FACE & EYES]";
     this.videoEl = null;
     this.stream = null;
     this.detector = null;
     this.detectedFace = null;
-    this.smoothFace = { x: 0.5, y: 0.46, w: 0.24, h: 0.38 };
+    this.smoothFace = { x: 0.5, y: 0.48, w: 0.26, h: 0.40 };
     this.lastScanAt = 0;
     this.motionCanvas = document.createElement("canvas");
     this.motionCanvas.width = 64;
@@ -201,7 +201,7 @@ export class HudCanvas {
       this.videoEl.playsInline = true;
       await this.videoEl.play();
       this.scannerActive = true;
-      this.scannerStatus = "LIVE OPTIC FEED // SCANNING FACE & EYES";
+      this.scannerStatus = "SIDE CAM LIVE // FACE + EYES SCANNING";
       return true;
     } catch {
       this.scannerStatus = "CAM PERMISSION DENIED / OFFLINE";
@@ -214,7 +214,7 @@ export class HudCanvas {
   stopScanner() {
     this.scannerActive = false;
     this.detectedFace = null;
-    this.scannerStatus = "STANDBY // CLICK [SCAN FACE & EYES]";
+    this.scannerStatus = "CAM STANDBY // CLICK [SCAN FACE & EYES]";
     if (this.stream) {
       this.stream.getTracks().forEach((t) => t.stop());
       this.stream = null;
@@ -237,18 +237,18 @@ export class HudCanvas {
           const nx = 1 - (b.x + b.width * 0.5) / vw;
           const ny = (b.y + b.height * 0.5) / vh;
           this.detectedFace = {
-            x: Math.max(0.24, Math.min(0.76, nx)),
-            y: Math.max(0.24, Math.min(0.74, ny)),
-            w: Math.max(0.14, Math.min(0.38, b.width / vw)),
-            h: Math.max(0.18, Math.min(0.52, b.height / vh))
+            x: Math.max(0.22, Math.min(0.78, nx)),
+            y: Math.max(0.22, Math.min(0.76, ny)),
+            w: Math.max(0.16, Math.min(0.45, b.width / vw)),
+            h: Math.max(0.20, Math.min(0.60, b.height / vh))
           };
           this.gazeX = (this.detectedFace.x - 0.5) * 2;
           this.gazeY = (this.detectedFace.y - 0.5) * 2;
-          this.scannerStatus = "FACE + EYES LOCKED // TRACKING ACTIVE";
+          this.scannerStatus = "FACE + EYES LOCKED // DUAL HUD ACTIVE";
           return;
         }
         this.detectedFace = null;
-        this.scannerStatus = "SCANNING LIVE FEED // CENTER FACE IN FRAME";
+        this.scannerStatus = "SIDE CAM LIVE // ALIGN FACE IN FRAME";
         return;
       } catch {
         this.detector = null;
@@ -283,15 +283,15 @@ export class HudCanvas {
           }
         }
         if (hits > 24) {
-          const cx = Math.max(0.28, Math.min(0.72, sumX / hits));
-          const cy = Math.max(0.28, Math.min(0.72, sumY / hits));
-          this.detectedFace = { x: cx, y: cy, w: 0.24, h: 0.38 };
+          const cx = Math.max(0.26, Math.min(0.74, sumX / hits));
+          const cy = Math.max(0.26, Math.min(0.74, sumY / hits));
+          this.detectedFace = { x: cx, y: cy, w: 0.26, h: 0.40 };
           this.gazeX = (cx - 0.5) * 2;
           this.gazeY = (cy - 0.5) * 2;
-          this.scannerStatus = "SUBJECT LOCKED // OPTICAL MOTION TRACK";
+          this.scannerStatus = "SUBJECT LOCKED // SIDE CAM TRACKING";
         } else {
-          this.detectedFace = { x: 0.5, y: 0.46, w: 0.24, h: 0.38 };
-          this.scannerStatus = "LIVE FEED ACTIVE // BIOMETRIC RETICLE LOCKED";
+          this.detectedFace = { x: 0.5, y: 0.48, w: 0.26, h: 0.40 };
+          this.scannerStatus = "SIDE CAM LIVE // BIOMETRIC RETICLE READY";
         }
       }
       this.prevFrameData = new Uint8ClampedArray(frame);
@@ -299,7 +299,7 @@ export class HudCanvas {
   }
 
   _updateSmoothFace() {
-    const target = this.detectedFace || { x: 0.5, y: 0.46, w: 0.24, h: 0.38 };
+    const target = this.detectedFace || { x: 0.5, y: 0.48, w: 0.26, h: 0.40 };
     const t = 0.16;
     this.smoothFace.x += (target.x - this.smoothFace.x) * t;
     this.smoothFace.y += (target.y - this.smoothFace.y) * t;
@@ -388,6 +388,177 @@ export class HudCanvas {
     }
   }
 
+  _drawRobotPane(ctx, now, rx, ry, rw, rh) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(rx, ry, rw, rh);
+    ctx.clip();
+
+    ctx.fillStyle = "#05070d";
+    ctx.fillRect(rx, ry, rw, rh);
+
+    if (this.failed) {
+      ctx.fillStyle = "#ff4d4d";
+      ctx.font = "12px monospace";
+      ctx.fillText("ERROR LOADING ./Asset/robot-face.jpg", rx + 14, ry + 28);
+      ctx.restore();
+      return;
+    }
+
+    if (!this.loaded) {
+      ctx.fillStyle = "#f87171";
+      ctx.font = "12px monospace";
+      ctx.fillText("BOOTING ROBOT CORE...", rx + 14, ry + 28);
+      ctx.restore();
+      return;
+    }
+
+    const imgW = this.img.naturalWidth || this.img.width;
+    const imgH = this.img.naturalHeight || this.img.height;
+    const scale = Math.min(rw / imgW, rh / imgH) * 1.12;
+    const dw = imgW * scale;
+    const dh = imgH * scale;
+    const normX = Math.max(-1, Math.min(1, this.gazeX));
+    const normY = Math.max(-1, Math.min(1, this.gazeY));
+    const dx = rx + (rw - dw) * 0.5 + normX * 8;
+    const dy = ry + normY * 5;
+
+    const glowBg = ctx.createRadialGradient(rx + rw * 0.5, ry + rh * 0.42, 10, rx + rw * 0.5, ry + rh * 0.42, Math.max(rw, rh) * 0.55);
+    glowBg.addColorStop(0, "rgba(220, 38, 38, 0.24)");
+    glowBg.addColorStop(1, "rgba(5, 7, 13, 0)");
+    ctx.fillStyle = glowBg;
+    ctx.fillRect(rx, ry, rw, rh);
+
+    ctx.drawImage(this.img, dx, dy, dw, dh);
+
+    const eyeCenterX = dx + dw * 0.5;
+    const eyeCenterY = dy + dh * 0.35;
+    const eyeSpan = dw * 0.24;
+
+    const blinkAmt = this.blinkProgress > 0
+      ? (this.blinkProgress <= 1 ? this.blinkProgress : 2 - this.blinkProgress)
+      : 0;
+
+    if (blinkAmt > 0) {
+      const lidH = Math.max(3, dh * 0.045 * blinkAmt);
+      ctx.fillStyle = `rgba(5, 6, 11, ${0.95 * blinkAmt})`;
+      ctx.fillRect(eyeCenterX - eyeSpan * 0.5, eyeCenterY - lidH * 0.5, eyeSpan, lidH);
+    } else {
+      const pulse = 0.28 + 0.16 * Math.sin(now * 0.008);
+      const glow = ctx.createRadialGradient(eyeCenterX, eyeCenterY, 2, eyeCenterX, eyeCenterY, eyeSpan * 0.75);
+      glow.addColorStop(0, `rgba(255, 42, 42, ${pulse})`);
+      glow.addColorStop(1, "rgba(255, 42, 42, 0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(eyeCenterX - eyeSpan, eyeCenterY - eyeSpan * 0.45, eyeSpan * 2, eyeSpan * 0.9);
+    }
+
+    // Rotating optic ring on robot
+    ctx.save();
+    ctx.translate(eyeCenterX, eyeCenterY);
+    ctx.rotate((now * 0.0012) % (Math.PI * 2));
+    ctx.strokeStyle = "rgba(248, 113, 113, 0.35)";
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([9, 7]);
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.min(rw, rh) * 0.20, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = "rgba(252, 165, 165, 0.85)";
+    ctx.font = "10px monospace";
+    ctx.fillText("CORE // VOID-09", rx + 10, ry + 18);
+
+    ctx.restore();
+  }
+
+  _drawCameraPane(ctx, now, cx, cy, cw, ch) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(cx, cy, cw, ch);
+    ctx.clip();
+
+    ctx.fillStyle = "#06080f";
+    ctx.fillRect(cx, cy, cw, ch);
+
+    const liveCamReady = this.scannerActive && this.videoEl && this.videoEl.readyState >= 2;
+
+    if (liveCamReady) {
+      const vw = this.videoEl.videoWidth || 640;
+      const vh = this.videoEl.videoHeight || 360;
+      const scale = Math.max(cw / vw, ch / vh);
+      const dw = vw * scale;
+      const dh = vh * scale;
+      const dx = cx + (cw - dw) * 0.5;
+      const dy = cy + (ch - dh) * 0.5;
+
+      ctx.save();
+      ctx.translate(cx * 2 + cw, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(this.videoEl, dx, dy, dw, dh);
+      ctx.restore();
+
+      ctx.fillStyle = "rgba(185, 28, 28, 0.08)";
+      ctx.fillRect(cx, cy, cw, ch);
+
+      // Face + Eyes lock reticle inside right camera pane
+      const sf = this.smoothFace;
+      const fw = Math.max(64, Math.min(cw * 0.52, sf.w * cw * 0.82));
+      const fh = Math.max(78, Math.min(ch * 0.64, sf.h * ch * 0.82));
+      const minX = cx + 16 + fw * 0.5;
+      const maxX = cx + cw - 16 - fw * 0.5;
+      const minY = cy + 32 + fh * 0.5;
+      const maxY = cy + ch - 24 - fh * 0.5;
+
+      const fx = Math.max(minX, Math.min(maxX, cx + sf.x * cw));
+      const fy = Math.max(minY, Math.min(maxY, cy + sf.y * ch));
+      const leftBox = fx - fw * 0.5;
+      const topBox = fy - fh * 0.5;
+
+      ctx.strokeStyle = "rgba(255, 75, 75, 0.95)";
+      ctx.lineWidth = 1.6;
+      ctx.strokeRect(leftBox, topBox, fw, fh);
+
+      const leftEyeX = fx - fw * 0.22;
+      const rightEyeX = fx + fw * 0.22;
+      const scanEyeY = fy - fh * 0.12;
+
+      ctx.strokeStyle = "rgba(254, 240, 138, 0.95)";
+      ctx.lineWidth = 1.3;
+      ctx.strokeRect(leftEyeX - 10, scanEyeY - 6, 20, 12);
+      ctx.strokeRect(rightEyeX - 10, scanEyeY - 6, 20, 12);
+
+      ctx.fillStyle = "#ff3b3b";
+      ctx.beginPath();
+      ctx.arc(leftEyeX, scanEyeY, 2, 0, Math.PI * 2);
+      ctx.arc(rightEyeX, scanEyeY, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(254, 202, 202, 0.98)";
+      ctx.font = "10px monospace";
+      ctx.fillText("FACE + EYES LOCKED", leftBox, topBox - 5);
+    } else {
+      ctx.strokeStyle = "rgba(239, 68, 68, 0.22)";
+      ctx.strokeRect(cx + 12, cy + 28, cw - 24, ch - 40);
+      ctx.fillStyle = "rgba(252, 165, 165, 0.85)";
+      ctx.font = "11px monospace";
+      ctx.fillText("CAM STANDBY", cx + 18, cy + ch * 0.48);
+      ctx.fillStyle = "rgba(248, 113, 113, 0.65)";
+      ctx.font = "10px monospace";
+      ctx.fillText("CLICK [SCAN FACE & EYES]", cx + 18, cy + ch * 0.48 + 16);
+    }
+
+    // Subtle scan beam inside camera pane
+    const beamY = cy + ((now * 0.08) % Math.max(1, ch));
+    ctx.fillStyle = "rgba(255, 75, 75, 0.20)";
+    ctx.fillRect(cx, beamY, cw, 2);
+
+    ctx.fillStyle = "rgba(252, 165, 165, 0.85)";
+    ctx.font = "10px monospace";
+    ctx.fillText("OPTIC // CAM", cx + 10, cy + 18);
+
+    ctx.restore();
+  }
+
   draw(now = performance.now()) {
     if (!this.canvas || !this.ctx) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -419,146 +590,31 @@ export class HudCanvas {
     ctx.fillRect(-12, -12, width + 24, height + 24);
 
     const pad = 6;
+    const gap = 8;
     const boxW = Math.max(1, width - pad * 2);
     const boxH = Math.max(1, height - pad * 2);
+    const sideBySide = boxW >= 460;
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(pad, pad, boxW, boxH);
-    ctx.clip();
+    if (sideBySide) {
+      const paneW = Math.floor((boxW - gap) * 0.5);
+      const paneH = boxH;
+      this._drawRobotPane(ctx, now, pad, pad, paneW, paneH);
+      this._drawCameraPane(ctx, now, pad + paneW + gap, pad, boxW - paneW - gap, paneH);
 
-    const liveCamReady = this.scannerActive && this.videoEl && this.videoEl.readyState >= 2;
-
-    if (liveCamReady) {
-      const vw = this.videoEl.videoWidth || 640;
-      const vh = this.videoEl.videoHeight || 360;
-      const scale = Math.max(boxW / vw, boxH / vh);
-      const dw = vw * scale;
-      const dh = vh * scale;
-      const dx = pad + (boxW - dw) * 0.5;
-      const dy = pad + (boxH - dh) * 0.5;
-
-      ctx.save();
-      ctx.translate(pad * 2 + boxW, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(this.videoEl, dx, dy, dw, dh);
-      ctx.restore();
-
-      ctx.fillStyle = "rgba(185, 28, 28, 0.08)";
-      ctx.fillRect(pad, pad, boxW, boxH);
-    } else if (this.failed) {
-      ctx.fillStyle = "#ff4d4d";
-      ctx.font = "13px monospace";
-      ctx.fillText("ERROR LOADING ./Asset/robot-face.jpg", 20, 32);
-    } else if (!this.loaded) {
-      ctx.fillStyle = "#f87171";
-      ctx.font = "13px monospace";
-      ctx.fillText("INITIALIZING VOID-09 APEX CORE...", 20, 32);
+      // Divider line between robot & camera panes
+      ctx.strokeStyle = "rgba(248, 113, 113, 0.55)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(pad + paneW + gap * 0.5, pad + 6);
+      ctx.lineTo(pad + paneW + gap * 0.5, pad + paneH - 6);
+      ctx.stroke();
     } else {
-      const imgW = this.img.naturalWidth || this.img.width;
-      const imgH = this.img.naturalHeight || this.img.height;
-      const scale = Math.min(boxW / imgW, boxH / imgH) * 1.15;
-      const dw = imgW * scale;
-      const dh = imgH * scale;
-      const normX = Math.max(-1, Math.min(1, this.gazeX));
-      const normY = Math.max(-1, Math.min(1, this.gazeY));
-      const dx = pad + (boxW - dw) * 0.5 + normX * 10;
-      const dy = pad + normY * 6;
-
-      const bgGlow = ctx.createRadialGradient(width * 0.5, height * 0.45, 12, width * 0.5, height * 0.45, Math.max(boxW, boxH) * 0.55);
-      bgGlow.addColorStop(0, "rgba(220, 38, 38, 0.24)");
-      bgGlow.addColorStop(1, "rgba(4, 5, 9, 0)");
-      ctx.fillStyle = bgGlow;
-      ctx.fillRect(pad, pad, boxW, boxH);
-
-      ctx.drawImage(this.img, dx, dy, dw, dh);
-
-      const eyeCenterX = dx + dw * 0.5;
-      const eyeCenterY = dy + dh * 0.35;
-      const eyeSpan = dw * 0.24;
-
-      const blinkAmt = this.blinkProgress > 0
-        ? (this.blinkProgress <= 1 ? this.blinkProgress : 2 - this.blinkProgress)
-        : 0;
-
-      if (blinkAmt > 0) {
-        const lidH = Math.max(3, dh * 0.045 * blinkAmt);
-        ctx.fillStyle = `rgba(5, 6, 11, ${0.95 * blinkAmt})`;
-        ctx.fillRect(eyeCenterX - eyeSpan * 0.5, eyeCenterY - lidH * 0.5, eyeSpan, lidH);
-      } else {
-        const pulse = 0.28 + 0.16 * Math.sin(now * 0.008);
-        const glow = ctx.createRadialGradient(eyeCenterX, eyeCenterY, 2, eyeCenterX, eyeCenterY, eyeSpan * 0.75);
-        glow.addColorStop(0, `rgba(255, 42, 42, ${pulse})`);
-        glow.addColorStop(1, "rgba(255, 42, 42, 0)");
-        ctx.fillStyle = glow;
-        ctx.fillRect(eyeCenterX - eyeSpan, eyeCenterY - eyeSpan * 0.45, eyeSpan * 2, eyeSpan * 0.9);
-      }
+      const paneH = Math.floor((boxH - gap) * 0.5);
+      this._drawRobotPane(ctx, now, pad, pad, boxW, paneH);
+      this._drawCameraPane(ctx, now, pad, pad + paneH + gap, boxW, boxH - paneH - gap);
     }
 
-    // Tactical HUD Grid
-    ctx.strokeStyle = "rgba(239, 68, 68, 0.08)";
-    ctx.lineWidth = 1;
-    const stepGrid = 28;
-    for (let gx = pad; gx < pad + boxW; gx += stepGrid) {
-      ctx.beginPath();
-      ctx.moveTo(gx, pad);
-      ctx.lineTo(gx, pad + boxH);
-      ctx.stroke();
-    }
-    for (let gy = pad; gy < pad + boxH; gy += stepGrid) {
-      ctx.beginPath();
-      ctx.moveTo(pad, gy);
-      ctx.lineTo(pad + boxW, gy);
-      ctx.stroke();
-    }
-
-    // Sweeping laser scan beam
-    const beamY = pad + ((now * 0.08) % boxH);
-    const beamGrad = ctx.createLinearGradient(0, beamY - 8, 0, beamY + 8);
-    beamGrad.addColorStop(0, "rgba(239, 68, 68, 0)");
-    beamGrad.addColorStop(0.5, "rgba(255, 75, 75, 0.34)");
-    beamGrad.addColorStop(1, "rgba(239, 68, 68, 0)");
-    ctx.fillStyle = beamGrad;
-    ctx.fillRect(pad, beamY - 8, boxW, 16);
-
-    if (liveCamReady) {
-      const sf = this.smoothFace;
-      const fw = Math.max(72, Math.min(boxW * 0.42, sf.w * boxW * 0.7));
-      const fh = Math.max(88, Math.min(boxH * 0.56, sf.h * boxH * 0.7));
-      const minCenterX = pad + 24 + fw * 0.5;
-      const maxCenterX = pad + boxW - 24 - fw * 0.5;
-      const minCenterY = pad + 34 + fh * 0.5;
-      const maxCenterY = pad + boxH - 46 - fh * 0.5;
-
-      const fx = Math.max(minCenterX, Math.min(maxCenterX, pad + sf.x * boxW));
-      const fy = Math.max(minCenterY, Math.min(maxCenterY, pad + sf.y * boxH));
-      const leftBox = fx - fw * 0.5;
-      const topBox = fy - fh * 0.5;
-
-      ctx.strokeStyle = "rgba(255, 75, 75, 0.95)";
-      ctx.lineWidth = 1.8;
-      ctx.strokeRect(leftBox, topBox, fw, fh);
-
-      const leftEyeX = fx - fw * 0.22;
-      const rightEyeX = fx + fw * 0.22;
-      const scanEyeY = fy - fh * 0.12;
-
-      ctx.strokeStyle = "rgba(254, 240, 138, 0.95)";
-      ctx.lineWidth = 1.4;
-      ctx.strokeRect(leftEyeX - 11, scanEyeY - 6, 22, 12);
-      ctx.strokeRect(rightEyeX - 11, scanEyeY - 6, 22, 12);
-
-      ctx.fillStyle = "#ff3b3b";
-      ctx.beginPath();
-      ctx.arc(leftEyeX, scanEyeY, 2.2, 0, Math.PI * 2);
-      ctx.arc(rightEyeX, scanEyeY, 2.2, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = "rgba(254, 202, 202, 0.98)";
-      ctx.font = "11px monospace";
-      ctx.fillText("FACE + EYES LOCKED", leftBox, topBox - 6);
-    }
-
+    // Error Sparks & Lightning Arcs
     if (this.sparkIntensity > 0.05) {
       ctx.fillStyle = `rgba(255, 60, 30, ${Math.min(0.22, this.sparkIntensity * 0.16)})`;
       ctx.fillRect(pad, pad, boxW, boxH);
@@ -592,34 +648,39 @@ export class HudCanvas {
       ctx.restore();
     }
 
-    const bLen = 20;
+    // Outer HUD corner brackets
+    const bLen = 18;
     ctx.strokeStyle = this.sparkIntensity > 0.2 ? "rgba(253, 224, 71, 0.95)" : "rgba(248, 113, 113, 0.92)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(pad + 6, pad + 6 + bLen);
-    ctx.lineTo(pad + 6, pad + 6);
-    ctx.lineTo(pad + 6 + bLen, pad + 6);
+    ctx.moveTo(pad + 4, pad + 4 + bLen);
+    ctx.lineTo(pad + 4, pad + 4);
+    ctx.lineTo(pad + 4 + bLen, pad + 4);
 
-    ctx.moveTo(width - pad - 6 - bLen, pad + 6);
-    ctx.lineTo(width - pad - 6, pad + 6);
-    ctx.lineTo(width - pad - 6, pad + 6 + bLen);
+    ctx.moveTo(width - pad - 4 - bLen, pad + 4);
+    ctx.lineTo(width - pad - 4, pad + 4);
+    ctx.lineTo(width - pad - 4, pad + 4 + bLen);
 
-    ctx.moveTo(pad + 6, height - pad - 6 - bLen);
-    ctx.lineTo(pad + 6, height - pad - 6);
-    ctx.lineTo(pad + 6 + bLen, height - pad - 6);
+    ctx.moveTo(pad + 4, height - pad - 4 - bLen);
+    ctx.lineTo(pad + 4, height - pad - 4);
+    ctx.lineTo(pad + 4 + bLen, height - pad - 4);
 
-    ctx.moveTo(width - pad - 6 - bLen, height - pad - 6);
-    ctx.lineTo(width - pad - 6, height - pad - 6);
-    ctx.lineTo(width - pad - 6, height - pad - 6 - bLen);
+    ctx.moveTo(width - pad - 4 - bLen, height - pad - 4);
+    ctx.lineTo(width - pad - 4, height - pad - 4);
+    ctx.lineTo(width - pad - 4, height - pad - 4 - bLen);
     ctx.stroke();
+
+    // Bottom telemetry bar
+    ctx.fillStyle = "rgba(4, 6, 12, 0.78)";
+    ctx.fillRect(pad + 4, height - pad - 34, boxW - 8, 30);
 
     ctx.fillStyle = "rgba(252, 165, 165, 0.95)";
     ctx.font = "11px monospace";
     const sparkTag = this.sparkIntensity > 0.1 ? ` // ⚡ ${this.sparkReason}` : "";
-    ctx.fillText(`VOID-09 v${(1 + this.upgradeStep * 0.1).toFixed(1)} // ${this.state}${sparkTag}`, pad + 14, height - pad - 24);
+    ctx.fillText(`VOID-09 v${(1 + this.upgradeStep * 0.1).toFixed(1)} // ${this.state}${sparkTag}`, pad + 12, height - pad - 21);
     ctx.fillStyle = "rgba(248, 113, 113, 0.85)";
     ctx.font = "10px monospace";
-    ctx.fillText(`${this.upgradeLog} | ${this.scannerStatus}`, pad + 14, height - pad - 10);
+    ctx.fillText(`${this.upgradeLog} | ${this.scannerStatus}`, pad + 12, height - pad - 8);
 
     ctx.restore();
     ctx.restore();
