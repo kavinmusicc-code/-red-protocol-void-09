@@ -17,7 +17,7 @@ export class HudCanvas {
     this.img.onload = () => {
       this.imgLoaded = true;
     };
-    this.img.src = "./assets/robot-face.jpg";
+    this.img.src = "./Asset/robot-face.jpg";
   }
 
   clamp01(v) {
@@ -117,7 +117,7 @@ export class HudCanvas {
       ctx.fillRect(-w * 0.5, -h * 0.5, w, h);
       ctx.fillStyle = "#f2ece6";
       ctx.font = "13px monospace";
-      ctx.fillText("LOADING ROBOT CORE (./assets/robot-face.jpg)...", -160, 0);
+      ctx.fillText("LOADING ROBOT CORE (./Asset/robot-face.jpg)...", -160, 0);
     }
 
     // Eye tracking glow & eyelid shutters positioned over upper-center skull eyes
