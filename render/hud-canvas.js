@@ -1094,7 +1094,38 @@ export class HudCanvas {
     }
   }
 
+    _isAndroidDevice() {
+    if (typeof navigator === "undefined") return false;
+    const ua = String(navigator.userAgent || "");
+    return /android/i.test(ua);
+  }
+
+  _renderAndroidBlocked() {
+    if (!this.canvas || !this.ctx) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const w = Math.max(300, Math.floor(rect.width || 640));
+    const h = Math.max(180, Math.floor(rect.height || 320));
+    this.canvas.width = w;
+    this.canvas.height = h;
+    const ctx = this.ctx;
+    ctx.fillStyle = "#090406";
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = "#ff2e2e";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(10, 10, w - 20, h - 20);
+    ctx.fillStyle = "#ff5252";
+    ctx.font = "bold 14px monospace";
+    ctx.fillText("ACCESS RESTRICTED // ANDROID NOT SUPPORTED", 24, h * 0.44);
+    ctx.fillStyle = "#fde047";
+    ctx.font = "11px monospace";
+    ctx.fillText("VOID-09 IS AVAILABLE ONLY ON DESKTOP, APPLE (MACOS) & LINUX.", 24, h * 0.44 + 24);
+  }
+
   start() {
+    if (this._isAndroidDevice()) {
+      this._renderAndroidBlocked();
+      return;
+    }
     if (this.running) return;
     this.running = true;
     this.autoDetectAndAddNodes(true);

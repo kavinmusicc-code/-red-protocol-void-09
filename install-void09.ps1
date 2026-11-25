@@ -3,7 +3,12 @@ param(
     [string]$RepoUrl = "https://github.com/kavinmusicc-code/-red-protocol-void-09.git"
 )
 
-Write-Host "=== VOID-09 TERMINAL INSTALLER ===" -ForegroundColor Red
+if ($env:OS -ne "Windows_NT") {
+    Write-Host "Yeh installer sirf Windows Desktop ke liye hai." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "=== VOID-09 DESKTOP INSTALLER (WINDOWS) ===" -ForegroundColor Red
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Host "Git nahi mila. Pehle Git install karein." -ForegroundColor Yellow
@@ -18,7 +23,6 @@ if (Test-Path (Join-Path $TargetDir ".git")) {
     git clone $RepoUrl $TargetDir
 }
 
-# Quick command wrapper in user bin/profile folder
 $binDir = Join-Path $HOME ".void09"
 if (-not (Test-Path $binDir)) {
     New-Item -ItemType Directory -Path $binDir -Force | Out-Null
@@ -31,7 +35,6 @@ git pull origin main
 Write-Host "VOID-09 updated at $TargetDir" -ForegroundColor Green
 "@ | Set-Content -Path $runnerPath -Encoding UTF8
 
-# Add alias to current PowerShell profile if not already present
 if (-not (Test-Path $PROFILE)) {
     New-Item -ItemType File -Path $PROFILE -Force | Out-Null
 }
@@ -40,4 +43,4 @@ if (-not (Select-String -Path $PROFILE -Pattern "Set-Alias -Name void09" -Quiet)
     Add-Content -Path $PROFILE -Value $aliasLine
 }
 
-Write-Host "Installation complete! Ab naye PowerShell mein 'void09' likh kar update kar sakte hain." -ForegroundColor Green
+Write-Host "Windows Desktop installation complete! Naye PowerShell mein 'void09' likh kar update kar sakte hain." -ForegroundColor Green
