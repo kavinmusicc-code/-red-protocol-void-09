@@ -1,44 +1,83 @@
-﻿const STORAGE_KEY = "void09_byok_config_v1";
+﻿const STORAGE_KEY = "void09_byok_vault_v1";
 
-export const apiVault = {
+const DEFAULT_CONFIG = {
+  provider: "openai",
+  model: "",
+  apiKey: ""
+};
+
+export class ApiVault {
+  constructor() {
+    this.config = this.load();
+  }
+
   load() {
     try {
+      if (typeof localStorage === "undefined") {
+        return { ...DEFAULT_CONFIG };
+      }
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return { provider: "openai", model: "", apiKey: "" };
+      if (!raw) {
+        return { ...DEFAULT_CONFIG };
+      }
       const parsed = JSON.parse(raw);
       return {
-        provider: parsed.provider || "openai",
-        model: parsed.model || "",
-        apiKey: parsed.apiKey || ""
+        provider: typeof parsed.provider === "string" && parsed.provider.trim()
+          ? parsed.provider.trim()
+          : DEFAULT_CONFIG.provider,
+        model: typeof parsed.model === "string" ? parsed.model.trim() : "",
+        apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey.trim() : ""
       };
-    } catch {
-      return { provider: "openai", model: "", apiKey: "" };
+    } catch (_) {
+      return { ...DEFAULT_CONFIG };
     }
-  },
+  }
 
-  save({ provider = "openai", model = "", apiKey = "" }) {
-    const cleanKey = String(apiKey || "").trim();
-    const payload = {
-      provider: String(provider || "openai").trim(),
-      model: String(model || "").trim(),
-      apiKey: cleanKey
+  save(nextCfg = {}) {
+    const current = this.load();
+    const updated = {
+      provider: typeof nextCfg.provider === "string" && nextCfg.provider.trim()
+        ? nextCfg.provider.trim()
+        : current.provider,
+      model: typeof nextCfg.model === "string" ? nextCfg.model.trim() : current.model,
+      apiKey: typeof nextCfg.apiKey === "string" ? nextCfg.apiKey.trim() : current.apiKey
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    return payload;
-  },
+
+    this.config = updated;
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      }
+    } catch (_) {}
+
+    return { ...updated };
+  }
 
   clear() {
-    localStorage.removeItem(STORAGE_KEY);
-  },
+    this.config = { ...DEFAULT_CONFIG };
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch (_) {}
+    return { ...this.config };
+  }
+
+  getConfig() {
+    return { ...this.load() };
+  }
 
   hasKey() {
     return Boolean(this.load().apiKey);
-  },
+  }
 
   maskedKey() {
-    const { apiKey } = this.load();
-    if (!apiKey) return "NONE";
-    if (apiKey.length <= 8) return "********";
-    return ${apiKey.slice(0, 4)}...;
+    const key = this.load().apiKey;
+    if (!key) return "NONE";
+    if (key.length <= 8) return "****";
+    return `${key.slice(0, 4)}...${key.slice(-4)}`;
   }
-};
+}
+
+export const apiVault = new ApiVault();
+export default apiVault;
