@@ -36,11 +36,13 @@ export class HudCanvas {
     this.animalPerceptionCount = 10000;
     this.upgradeLog = `UPGRADE #1 // 20K HUMAN + 10K ANIMAL MATRIX // ${this._formatPower(this.evolutionPower)}`;
 
-    // Danger / Crash Siren & Red Combat Look state (real issues or explicit alert only)
+    // Danger / Intrusion Siren, Red Combat Look & Defensive Lockdown state
     this.dangerUntil = 0;
     this.dangerReason = "";
     this.lastSirenAt = 0;
     this._audioCtx = null;
+    this.defensiveLockUntil = 0;
+    this.externalRequestsPaused = false;
 
     // Robot Voice & Reply state
     this.voiceEnabled = true;
@@ -159,7 +161,20 @@ export class HudCanvas {
   }
 
   isDangerActive(now = performance.now()) {
-    return now < this.dangerUntil;
+    return now < this.dangerUntil || now < this.defensiveLockUntil;
+  }
+
+  engageDefensiveLockdown(durationMs = 15000, reason = "INTRUSION_CONTAINMENT") {
+    const now = performance.now();
+    this.defensiveLockUntil = now + Math.max(3000, durationMs);
+    this.dangerUntil = Math.max(this.dangerUntil, now + 6000);
+    this.dangerReason = String(reason || "INTRUSION_CONTAINMENT");
+    this.externalRequestsPaused = true;
+    this.state = "DEFENSE_LOCKDOWN";
+    this.triggerSpark(this.dangerReason, 1.35);
+    this._playSiren();
+    const secs = Math.ceil(durationMs / 1000);
+    this.setReply(`Defensive lockdown active for ${secs}s. External probes paused to buy response time.`, true);
   }
 
   _playSiren() {
@@ -265,13 +280,18 @@ export class HudCanvas {
     const q = String(promptText || "").trim();
     const low = q.toLowerCase();
 
+    if (/hacker|hack|attack|intrusion|हैकर|अटैक|lockdown|defend|बचाव/i.test(low)) {
+      this.engageDefensiveLockdown(15000, q || "INTRUSION_ALERT");
+      return "Defensive lockdown engaged! Siren active, external requests paused for 15 seconds.";
+    }
+
     if (/danger|crash|khatra|alert|siren|threat|खतरा|क्रैश|सायरन/i.test(low)) {
       this.triggerDangerAlert(q || "MANUAL_DANGER_COMMAND", 5000);
       return "RED ALERT triggered! Siren active, robot turned crimson, and combat look engaged.";
     }
 
     const ollamaUrl = String(this.nodes.ollama?.url || "").trim();
-    if (ollamaUrl) {
+    if (ollamaUrl && !this.externalRequestsPaused) {
       const base = ollamaUrl.replace(/\/api\/tags.*$/i, "");
       try {
         const res = await fetch(`${base}/api/generate`, {
@@ -304,7 +324,7 @@ export class HudCanvas {
       return `Current power is ${this._formatPower(this.evolutionPower)} at step ${this.upgradeStep}.`;
     }
     if (/who|kaun|naam|name/i.test(low)) {
-      return "I am VOID-09, your HUD interface with voice, real-issue alert mode, and node controls.";
+      return "I am VOID-09, your HUD interface with voice, real-issue alert mode, and defensive lockdown.";
     }
     return `Received "${q}". VOID-09 is active at ${this._formatPower(this.evolutionPower)}.`;
   }
@@ -408,6 +428,7 @@ export class HudCanvas {
   }
 
   async _probeUrl(url, apiKey = "", timeoutMs = 1300) {
+    if (this.externalRequestsPaused) return false;
     const headers = {};
     if (apiKey && String(apiKey).trim()) {
       headers.Authorization = `Bearer ${String(apiKey).trim()}`;
@@ -431,6 +452,7 @@ export class HudCanvas {
   }
 
   async autoDetectAndAddNodes(silent = true) {
+    if (this.externalRequestsPaused) return [];
     this.bridgeStatus = `AUTO-DETECTING // ${this._formatPower(this.evolutionPower)}...`;
     const found = [];
 
@@ -487,6 +509,10 @@ export class HudCanvas {
     const key = String(nodeKey || "").toLowerCase();
     const node = this.nodes[key];
     if (!node) return false;
+    if (this.externalRequestsPaused) {
+      this.setReply("External node checks are paused during defensive lockdown.", false);
+      return false;
+    }
     if (!node.url || !String(node.url).trim()) {
       node.status = "LINK_REQUIRED";
       this.bridgeStatus = `${node.label} LINK REQUIRED // ${this._formatPower(this.evolutionPower)}`;
@@ -664,6 +690,21 @@ export class HudCanvas {
           if (ok) this.setReply("Optic scanner online. Tracking face and eyes.", false);
         });
       }
+    });
+
+    const lockBtn = document.createElement("button");
+    lockBtn.type = "button";
+    lockBtn.textContent = "DEFENSE LOCK (15S)";
+    lockBtn.style.cssText = [
+      "background:rgba(127,29,29,0.96)",
+      "color:#fde047",
+      "border:1px solid rgba(255,75,75,0.9)",
+      "padding:4px 7px",
+      "cursor:pointer",
+      "text-transform:uppercase"
+    ].join(";");
+    lockBtn.addEventListener("click", () => {
+      this.engageDefensiveLockdown(15000, "MANUAL_DEFENSE_LOCK");
     });
 
     const sirenBtn = document.createElement("button");
@@ -876,6 +917,7 @@ export class HudCanvas {
     this._replyBox = replyBar;
 
     bar.appendChild(btn);
+    bar.appendChild(lockBtn);
     bar.appendChild(sirenBtn);
     bar.appendChild(voiceBtn);
     bar.appendChild(linksToggleBtn);
@@ -1023,6 +1065,12 @@ export class HudCanvas {
   }
 
   _updateSelfEvolution(now) {
+    if (now >= this.defensiveLockUntil && this.externalRequestsPaused) {
+      this.externalRequestsPaused = false;
+      if (this.state === "DEFENSE_LOCKDOWN") {
+        this.state = "APEX_LOCK";
+      }
+    }
     if (now - this.lastUpgradeAt >= 2500) {
       this.lastUpgradeAt = now;
       this.doubleAndUpgrade("AUTO_2X_UPGRADE", false, false);
@@ -1226,7 +1274,9 @@ export class HudCanvas {
 
     ctx.fillStyle = danger ? "#ff4d4d" : "rgba(253, 224, 71, 0.95)";
     ctx.font = "10px monospace";
-    const modeLabel = danger ? " // 🚨 REAL ALERT + COMBAT LOOK" : (this.voiceSpeaking ? " // 🔊 SPEAKING" : "");
+    const modeLabel = this.externalRequestsPaused
+      ? " // 🛡️ DEFENSE LOCK"
+      : (danger ? " // 🚨 REAL ALERT + COMBAT LOOK" : (this.voiceSpeaking ? " // 🔊 SPEAKING" : ""));
     ctx.fillText(`CORE // ${this._formatPower(this.evolutionPower)}${modeLabel}`, rx + 10, ry + 18);
 
     ctx.restore();
@@ -1438,7 +1488,10 @@ export class HudCanvas {
 
     ctx.fillStyle = danger ? "#ff5252" : "rgba(253, 224, 71, 0.96)";
     ctx.font = "11px monospace";
-    const alertTag = danger ? ` // 🚨 SIREN: ${this.dangerReason}` : (this.sparkIntensity > 0.1 ? ` // ⚡ ${this.sparkReason}` : "");
+    const lockRem = Math.max(0, Math.ceil((this.defensiveLockUntil - now) / 1000));
+    const alertTag = lockRem > 0
+      ? ` // 🛡️ LOCK ${lockRem}s: ${this.dangerReason}`
+      : (danger ? ` // 🚨 SIREN: ${this.dangerReason}` : (this.sparkIntensity > 0.1 ? ` // ⚡ ${this.sparkReason}` : ""));
     ctx.fillText(`VOID-09 ${this.readinessPercent}% (STEP #${this.upgradeStep} // ${this._formatPower(this.evolutionPower)}) // ${danger ? "RED_ALERT" : this.state}${alertTag}`, pad + 12, height - pad - 21);
     ctx.fillStyle = danger ? "#ff9999" : "rgba(252, 165, 165, 0.9)";
     ctx.font = "10px monospace";
