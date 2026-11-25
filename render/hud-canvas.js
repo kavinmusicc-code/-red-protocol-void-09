@@ -35,30 +35,48 @@ export class HudCanvas {
       ollama: {
         label: "OLLAMA",
         url: "http://127.0.0.1:11434/api/tags",
+        candidates: [
+          "http://127.0.0.1:11434/api/tags",
+          "http://localhost:11434/api/tags"
+        ],
         apiKey: "",
         required: true,
+        autoDetected: false,
         model: "llama3.2",
         status: "REQUIRED"
       },
       openclaw: {
         label: "OPENCLAW",
         url: "http://127.0.0.1:8787/health",
+        candidates: [
+          "http://127.0.0.1:8787/health",
+          "http://localhost:8787/health",
+          "http://127.0.0.1:8787/status"
+        ],
         apiKey: "",
         required: true,
+        autoDetected: false,
         mode: "AGENT_LINK",
         status: "REQUIRED"
       },
       mythos: {
         label: "MYTHOS",
         url: "http://127.0.0.1:9000/status",
+        candidates: [
+          "http://127.0.0.1:9000/status",
+          "http://localhost:9000/status",
+          "http://127.0.0.1:9000/health"
+        ],
         apiKey: "",
         required: true,
+        autoDetected: false,
         core: "MYTHOS_ENGINE",
         status: "REQUIRED"
       }
     };
+    this._drawerInputs = null;
     this.activeNode = "OLLAMA+OPENCLAW+MYTHOS";
-    this.bridgeStatus = "REQUIRED LINKS: OLLAMA + OPENCLAW + MYTHOS";
+    this.bridgeStatus = "AUTO-DETECT READY // OLLAMA + OPENCLAW + MYTHOS";
 
     // Error spark state (only on real errors)
     this.sparks = [];
@@ -86,6 +104,79 @@ export class HudCanvas {
     this._createScannerControls();
     this._initFaceDetector();
     this._bindGlobalErrors();
+  }
+
+  _syncInputsFromNodes() {
+    if (!this._drawerInputs) return;
+    this.requiredNodes.forEach((key) => {
+      if (this._drawerInputs[key] && this._drawerInputs[key].urlInput) {
+        this._drawerInputs[key].urlInput.value = this.nodes[key].url || "";
+      }
+    });
+  }
+
+  async _probeUrl(url, apiKey = "", timeoutMs = 1300) {
+    const headers = {};
+    if (apiKey && String(apiKey).trim()) {
+      headers.Authorization = `Bearer ${String(apiKey).trim()}`;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      await fetch(String(url).trim(), {
+        method: "GET",
+        mode: "no-cors",
+        headers,
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      return true;
+    } catch {
+      clearTimeout(timer);
+      return false;
+    }
+  }
+
+  async autoDetectAndAddNodes(silentSpark = true) {
+    this.bridgeStatus = "AUTO-DETECTING LOCAL / RUNNING NODES...";
+    const found = [];
+
+    for (const key of this.requiredNodes) {
+      const node = this.nodes[key];
+      const list = Array.from(new Set([node.url, ...(node.candidates || [])].filter(Boolean)));
+      let matchedUrl = null;
+
+      for (const candidate of list) {
+        const ok = await this._probeUrl(candidate, node.apiKey, 1200);
+        if (ok) {
+          matchedUrl = candidate;
+          break;
+        }
+      }
+
+      if (matchedUrl) {
+        node.url = matchedUrl;
+        node.autoDetected = true;
+        node.status = "AUTO_LINKED";
+        found.push(node.label);
+      } else if (!node.url || !String(node.url).trim()) {
+        node.status = "MISSING_REQUIRED";
+      } else {
+        node.status = "NOT_DETECTED";
+      }
+    }
+
+    this._syncInputsFromNodes();
+
+    if (found.length > 0) {
+      this.bridgeStatus = `AUTO-ADDED: ${found.join(" + ")}`;
+    } else {
+      this.bridgeStatus = "NO RUNNING NODE AUTO-DETECTED // CHECK CORS OR ADD LINK";
+      if (!silentSpark) {
+        this.triggerSpark("AUTO_DETECT_NONE", 1.0);
+      }
+    }
+    return found;
   }
 
   getMissingRequiredNodes() {
@@ -116,6 +207,7 @@ export class HudCanvas {
     const key = String(nodeKey || "").toLowerCase();
     if (!this.nodes[key]) return null;
     this.nodes[key] = { ...this.nodes[key], ...patch };
+    this._syncInputsFromNodes();
     return this.nodes[key];
   }
 
@@ -134,31 +226,17 @@ export class HudCanvas {
     node.status = "PROBING";
     this.bridgeStatus = `PROBING ${node.label} [REQUIRED]...`;
 
-    const headers = {};
-    if (node.apiKey && String(node.apiKey).trim()) {
-      headers.Authorization = `Bearer ${String(node.apiKey).trim()}`;
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 1800);
-    try {
-      await fetch(String(node.url).trim(), {
-        method: "GET",
-        mode: "no-cors",
-        headers,
-        signal: controller.signal
-      });
-      clearTimeout(timer);
+    const ok = await this._probeUrl(node.url, node.apiKey, 1800);
+    if (ok) {
       node.status = "LINKED";
       this.bridgeStatus = `${node.label} LINKED // READY`;
       return true;
-    } catch {
-      clearTimeout(timer);
-      node.status = "OFFLINE/LOCAL";
-      this.bridgeStatus = `${node.label} UNREACHABLE (CHECK LOCAL LINK)`;
-      this.triggerSpark(`${node.label}_LINK_FAULT`, 1.1);
-      return false;
     }
+
+    node.status = "OFFLINE/LOCAL";
+    this.bridgeStatus = `${node.label} UNREACHABLE (CHECK LOCAL LINK)`;
+    this.triggerSpark(`${node.label}_LINK_FAULT`, 1.1);
+    return false;
   }
 
   async syncAllNodes() {
@@ -307,7 +385,7 @@ export class HudCanvas {
       "top:42px",
       "right:14px",
       "z-index:25",
-      "width:290px",
+      "width:295px",
       "background:rgba(8,11,20,0.96)",
       "border:1px solid rgba(248,113,113,0.65)",
       "padding:8px",
@@ -317,7 +395,7 @@ export class HudCanvas {
     ].join(";");
 
     const reqBanner = document.createElement("div");
-    reqBanner.textContent = "ALL 3 REQUIRED: OLLAMA + OPENCLAW + MYTHOS";
+    reqBanner.textContent = "REQUIRED: OLLAMA + OPENCLAW + MYTHOS (AUTO-DETECT ENABLED)";
     reqBanner.style.cssText = "color:#fca5a5;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid rgba(248,113,113,0.25);";
     drawer.appendChild(reqBanner);
 
@@ -352,6 +430,17 @@ export class HudCanvas {
       row.appendChild(keyInput);
       drawer.appendChild(row);
     });
+    this._drawerInputs = inputs;
+
+    const detectBtn = document.createElement("button");
+    detectBtn.type = "button";
+    detectBtn.textContent = "AUTO-DETECT & ADD RUNNING NODES";
+    detectBtn.style.cssText = "width:100%;background:rgba(15,23,42,0.95);color:#fde047;border:1px solid rgba(253,224,71,0.6);padding:4px 6px;margin-bottom:5px;cursor:pointer;";
+    detectBtn.addEventListener("click", () => {
+      reqErrorEl.style.display = "none";
+      this.autoDetectAndAddNodes(false);
+    });
+    drawer.appendChild(detectBtn);
 
     drawer.appendChild(reqErrorEl);
 
@@ -615,6 +704,7 @@ export class HudCanvas {
   start() {
     if (this.running) return;
     this.running = true;
+    this.autoDetectAndAddNodes(true);
     this.loop();
   }
 
