@@ -103,29 +103,42 @@ export class HudCanvas {
 
     const imgW = this.img.naturalWidth || this.img.width;
     const imgH = this.img.naturalHeight || this.img.height;
-    const padding = 10;
-    const availW = Math.max(1, width - padding * 2);
-    const availH = Math.max(1, height - padding * 2);
-    const scale = Math.min(availW / imgW, availH / imgH);
-    const drawW = imgW * scale;
-    const drawH = imgH * scale;
 
     const normX = Math.abs(this.gazeX) <= 1 && Math.abs(this.gazeY) <= 1 ? this.gazeX : (this.gazeX - 0.5) * 2;
     const normY = Math.abs(this.gazeY) <= 1 && Math.abs(this.gazeY) <= 1 ? this.gazeY : (this.gazeY - 0.5) * 2;
-    const offsetX = Math.max(-14, Math.min(14, normX * 10));
-    const offsetY = Math.max(-10, Math.min(10, normY * 8));
+    const offsetX = Math.max(-16, Math.min(16, normX * 12));
+    const offsetY = Math.max(-12, Math.min(12, normY * 9));
+
+    const padding = 8;
+    const availW = Math.max(1, width - padding * 2);
+    const availH = Math.max(1, height - padding * 2);
+    const scale = Math.min(availW / imgW, availH / imgH) * 1.28;
+    const drawW = imgW * scale;
+    const drawH = imgH * scale;
 
     const x = (width - drawW) / 2 + offsetX;
-    const y = (height - drawH) / 2 + offsetY;
+    const y = padding + offsetY;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(padding, padding, availW, availH);
+    ctx.clip();
 
     ctx.drawImage(this.img, x, y, drawW, drawH);
 
+    // Sirf aankhon ke area ke aas-paas halka eyelid/blink shutter effect (poore photo par nahi)
     if (this.blinkProgress > 0) {
       const factor = this.blinkProgress <= 1 ? this.blinkProgress : 2 - this.blinkProgress;
-      ctx.fillStyle = `rgba(7, 9, 15, ${Math.min(0.65, factor * 0.65)})`;
-      ctx.fillRect(0, 0, width, height);
+      const eyeBandW = drawW * 0.36;
+      const eyeBandH = drawH * 0.08 * Math.min(1, factor);
+      const eyeCenterX = x + drawW * 0.5;
+      const eyeCenterY = y + drawH * 0.25;
+
+      ctx.fillStyle = "rgba(7, 9, 15, 0.92)";
+      ctx.fillRect(eyeCenterX - eyeBandW / 2, eyeCenterY - eyeBandH / 2, eyeBandW, eyeBandH);
     }
 
+    ctx.restore();
     ctx.restore();
   }
 
