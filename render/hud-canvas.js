@@ -634,7 +634,7 @@ this.videoEl = null;
 
   _createScannerControls() {
     if (!this.canvas || !this.canvas.parentElement) return;
-    const old = document.querySelectorAll(".void09-scanner-bar, .void09-node-drawer, .void09-reply-bar");
+    const old = document.querySelectorAll(".void09-scanner-bar, .void09-node-drawer, .void09-reply-bar, .void09-hub-panel");
     old.forEach((el) => el.remove());
 
     const parent = this.canvas.parentElement;
@@ -646,32 +646,46 @@ this.videoEl = null;
     bar.className = "void09-scanner-bar";
     bar.style.cssText = [
       "position:absolute",
-      "top:12px",
-      "right:14px",
+      "top:10px",
+      "right:12px",
       "z-index:20",
-      "display:inline-flex",
-      "flex-wrap:wrap",
-      "gap:5px",
-      "align-items:center",
       "font-family:monospace",
       "font-size:10px"
     ].join(";");
 
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = "SCAN FACE & EYES";
-    btn.style.cssText = [
-      "background:rgba(185,28,28,0.92)",
-      "color:#fff",
-      "border:1px solid rgba(254,202,202,0.7)",
-      "padding:4px 8px",
+    const hubBtn = document.createElement("button");
+    hubBtn.type = "button";
+    hubBtn.textContent = "VOID-09 CONTROLS";
+    hubBtn.style.cssText = [
+      "background:rgba(127,29,29,0.95)",
+      "color:#fde047",
+      "border:1px solid rgba(253,224,71,0.75)",
+      "padding:4px 9px",
       "cursor:pointer",
-      "letter-spacing:0.5px",
+      "letter-spacing:0.6px",
       "text-transform:uppercase"
     ].join(";");
 
-    }
-    });
+    const panel = document.createElement("div");
+    panel.className = "void09-hub-panel";
+    panel.style.cssText = [
+      "display:none",
+      "position:absolute",
+      "top:36px",
+      "right:12px",
+      "z-index:24",
+      "width:255px",
+      "background:rgba(8,11,20,0.97)",
+      "border:1px solid rgba(248,113,113,0.75)",
+      "padding:8px",
+      "font-family:monospace",
+      "font-size:10px",
+      "color:#fecaca",
+      "box-shadow:0 0 20px rgba(239,68,68,0.3)"
+    ].join(";");
+
+    const actionGrid = document.createElement("div");
+    actionGrid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:6px;";
 
     const lockBtn = document.createElement("button");
     lockBtn.type = "button";
@@ -680,51 +694,59 @@ this.videoEl = null;
       "background:rgba(127,29,29,0.96)",
       "color:#fde047",
       "border:1px solid rgba(255,75,75,0.9)",
-      "padding:4px 7px",
+      "padding:4px 6px",
       "cursor:pointer",
       "text-transform:uppercase"
     ].join(";");
-    lockconst sirenBtn = document.createElement("button");
+    lockBtn.addEventListener("click", () => {
+      this.engageDefensiveLockdown(15000, "MANUAL_DEFENSE_LOCK");
+    });
+
+    const sirenBtn = document.createElement("button");
     sirenBtn.type = "button";
     sirenBtn.textContent = "SIREN ALERT";
     sirenBtn.style.cssText = [
       "background:rgba(153,27,27,0.95)",
       "color:#fecaca",
       "border:1px solid rgba(255,75,75,0.85)",
-      "padding:4px 7px",
+      "padding:4px 6px",
       "cursor:pointer",
       "text-transform:uppercase"
     ].join(";");
-    sirenconst voiceBtn = document.createElement("button");
+    sirenBtn.addEventListener("click", () => {
+      this.triggerDangerAlert("MANUAL_TEST_ALERT", 5000);
+    });
+
+    const voiceBtn = document.createElement("button");
     voiceBtn.type = "button";
     voiceBtn.textContent = this.voiceEnabled ? "VOICE: ON" : "VOICE: OFF";
     voiceBtn.style.cssText = [
       "background:rgba(15,23,42,0.92)",
       "color:#86efac",
       "border:1px solid rgba(134,239,172,0.6)",
-      "padding:4px 7px",
+      "padding:4px 6px",
       "cursor:pointer",
       "text-transform:uppercase"
     ].join(";");
-    voice}
+    voiceBtn.addEventListener("click", () => {
+      this.voiceEnabled = !this.voiceEnabled;
+      voiceBtn.textContent = this.voiceEnabled ? "VOICE: ON" : "VOICE: OFF";
+      voiceBtn.style.color = this.voiceEnabled ? "#86efac" : "#f87171";
+      if (this.voiceEnabled) {
+        this.speak("Robot voice activated.", { force: true });
+      }
     });
 
     const drawer = document.createElement("div");
     drawer.className = "void09-node-drawer";
     drawer.style.cssText = [
       "display:none",
-      "position:absolute",
-      "top:42px",
-      "right:14px",
-      "z-index:25",
-      "width:305px",
-      "background:rgba(8,11,20,0.97)",
-      "border:1px solid rgba(248,113,113,0.75)",
-      "padding:8px",
+      "margin-top:6px",
+      "padding-top:6px",
+      "border-top:1px solid rgba(248,113,113,0.35)",
       "font-family:monospace",
       "font-size:10px",
-      "color:#fecaca",
-      "box-shadow:0 0 22px rgba(239,68,68,0.35)"
+      "color:#fecaca"
     ].join(";");
 
     const reqBanner = document.createElement("div");
@@ -743,16 +765,16 @@ this.videoEl = null;
 
       const title = document.createElement("div");
       if (node.keyRequired) {
-        title.innerHTML = `<span style="color:#fde047;">${node.label}</span> <span style="color:#f87171;">* LINK + 1 API KEY REQUIRED</span>`;
+        title.innerHTML = `<span style="color:#fde047;">${node.label}</span> <span style="color:#f87171;">* LINK + KEY</span>`;
       } else {
-        title.innerHTML = `<span style="color:#fde047;">${node.label}</span> <span style="color:#86efac;">* LINK REQUIRED (LOCAL / NO KEY)</span>`;
+        title.innerHTML = `<span style="color:#fde047;">${node.label}</span> <span style="color:#86efac;">* LOCAL</span>`;
       }
       title.style.cssText = "margin-bottom:2px;";
 
       const urlInput = document.createElement("input");
       urlInput.type = "text";
       urlInput.required = true;
-      urlInput.placeholder = `${node.label} URL (REQUIRED)`;
+      urlInput.placeholder = `${node.label} URL`;
       urlInput.value = node.url;
       urlInput.style.cssText = "width:100%;box-sizing:border-box;background:#05070d;color:#fff;border:1px solid rgba(248,113,113,0.55);padding:3px 5px;margin-bottom:2px;font-size:10px;";
 
@@ -761,11 +783,11 @@ this.videoEl = null;
       keyInput.autocomplete = "off";
       if (node.keyRequired) {
         keyInput.required = true;
-        keyInput.placeholder = `${node.label} single API Key (required)`;
+        keyInput.placeholder = `${node.label} API Key`;
         keyInput.style.cssText = "width:100%;box-sizing:border-box;background:#05070d;color:#fff;border:1px solid rgba(253,224,71,0.55);padding:3px 5px;font-size:10px;";
       } else {
         keyInput.disabled = true;
-        keyInput.placeholder = "Runs locally (no API key needed)";
+        keyInput.placeholder = "Local / No key needed";
         keyInput.style.cssText = "width:100%;box-sizing:border-box;background:#0b0f17;color:#94a3b8;border:1px solid rgba(148,163,184,0.25);padding:3px 5px;font-size:10px;";
       }
 
@@ -781,15 +803,25 @@ this.videoEl = null;
     detectBtn.type = "button";
     detectBtn.textContent = "AUTO-DETECT LINKS";
     detectBtn.style.cssText = "width:100%;background:rgba(15,23,42,0.95);color:#fde047;border:1px solid rgba(253,224,71,0.6);padding:4px 6px;margin-bottom:5px;cursor:pointer;";
-    detectdrawer.appendChild(detectBtn);
-
+    detectBtn.addEventListener("click", () => {
+      reqErrorEl.style.display = "none";
+      this.autoDetectAndAddNodes(false);
+    });
+    drawer.appendChild(detectBtn);
     drawer.appendChild(reqErrorEl);
 
     const saveBtn = document.createElement("button");
     saveBtn.type = "button";
-    saveBtn.textContent = "APPLY & SYNC REQUIRED NODES";
+    saveBtn.textContent = "APPLY & SYNC";
     saveBtn.style.cssText = "width:100%;background:rgba(185,28,28,0.95);color:#fff;border:1px solid rgba(254,202,202,0.8);padding:4px 6px;cursor:pointer;";
-    save});
+    saveBtn.addEventListener("click", () => {
+      this.requiredNodes.forEach((key) => {
+        const node = this.nodes[key];
+        this.configureNode(key, {
+          url: inputs[key].urlInput.value.trim(),
+          apiKey: node.keyRequired ? inputs[key].keyInput.value.trim() : ""
+        });
+      });
       const missing = this.getMissingRequiredNodes();
       if (missing.length > 0) {
         const names = missing.map((k) => this.nodes[k].label).join(", ");
@@ -801,6 +833,7 @@ this.videoEl = null;
       reqErrorEl.style.display = "none";
       this.syncAllNodes();
       drawer.style.display = "none";
+      panel.style.display = "none";
     });
     drawer.appendChild(saveBtn);
 
@@ -811,11 +844,16 @@ this.videoEl = null;
       "background:rgba(15,23,42,0.92)",
       "color:#fde047",
       "border:1px solid rgba(253,224,71,0.55)",
-      "padding:4px 7px",
+      "padding:4px 6px",
       "cursor:pointer",
       "text-transform:uppercase"
     ].join(";");
-    linksToggleconst makeLinkBtn = (label, key) => {
+    linksToggleBtn.addEventListener("click", () => {
+      reqErrorEl.style.display = "none";
+      drawer.style.display = drawer.style.display === "none" ? "block" : "none";
+    });
+
+    const makeLinkBtn = (label, key) => {
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = `${label}*`;
@@ -823,7 +861,7 @@ this.videoEl = null;
         "background:rgba(15,23,42,0.92)",
         "color:#fca5a5",
         "border:1px solid rgba(248,113,113,0.55)",
-        "padding:4px 7px",
+        "padding:4px 6px",
         "cursor:pointer",
         "text-transform:uppercase"
       ].join(";");
@@ -835,14 +873,30 @@ this.videoEl = null;
     syncBtn.type = "button";
     syncBtn.textContent = "SYNC ALL*";
     syncBtn.style.cssText = [
+      "grid-column:1 / -1",
       "background:rgba(127,29,29,0.95)",
       "color:#fde047",
       "border:1px solid rgba(253,224,71,0.75)",
-      "padding:4px 7px",
+      "padding:4px 6px",
       "cursor:pointer",
       "text-transform:uppercase"
     ].join(";");
-    syncconst replyBar = document.createElement("div");
+    syncBtn.addEventListener("click", () => {
+      if (!this.validateRequiredNodes()) {
+        drawer.style.display = "block";
+        const missing = this.getMissingRequiredNodes().map((k) => this.nodes[k].label).join(", ");
+        reqErrorEl.textContent = `REQUIRED MISSING: ${missing}`;
+        reqErrorEl.style.display = "block";
+        return;
+      }
+      this.syncAllNodes();
+    });
+
+    hubBtn.addEventListener("click", () => {
+      panel.style.display = panel.style.display === "none" ? "block" : "none";
+    });
+
+    const replyBar = document.createElement("div");
     replyBar.className = "void09-reply-bar";
     replyBar.style.cssText = [
       "margin-top:6px",
@@ -856,21 +910,24 @@ this.videoEl = null;
     replyBar.textContent = `VOID-09 REPLY: ${this.lastReply}`;
     this._replyBox = replyBar;
 
-    bar.appendChild(btn);
-    bar.appendChild(lockBtn);
-    bar.appendChild(sirenBtn);
-    bar.appendChild(voiceBtn);
-    bar.appendChild(linksToggleBtn);
-    bar.appendChild(makeLinkBtn("OLLAMA", "ollama"));
-    bar.appendChild(makeLinkBtn("OPENCLAW", "openclaw"));
-    bar.appendChild(makeLinkBtn("MYTHOS", "mythos"));
-    bar.appendChild(makeLinkBtn("GROK", "grok"));
-    bar.appendChild(syncBtn);
+    actionGrid.appendChild(lockBtn);
+    actionGrid.appendChild(sirenBtn);
+    actionGrid.appendChild(voiceBtn);
+    actionGrid.appendChild(linksToggleBtn);
+    actionGrid.appendChild(makeLinkBtn("OLLAMA", "ollama"));
+    actionGrid.appendChild(makeLinkBtn("OPENCLAW", "openclaw"));
+    actionGrid.appendChild(makeLinkBtn("MYTHOS", "mythos"));
+    actionGrid.appendChild(makeLinkBtn("GROK", "grok"));
+    actionGrid.appendChild(syncBtn);
+
+    panel.appendChild(actionGrid);
+    panel.appendChild(drawer);
+
+    bar.appendChild(hubBtn);
     parent.appendChild(bar);
-    parent.appendChild(drawer);
+    parent.appendChild(panel);
     parent.insertAdjacentElement("afterend", replyBar);
   }
-
   _updateSmoothFace() {
     const target = this.detectedFace || { x: 0.5, y: 0.44, w: 0.24, h: 0.36 };
     const t = 0.28;
