@@ -126,15 +126,15 @@ export class HudCanvas {
 
     ctx.drawImage(this.img, x, y, drawW, drawH);
 
-    // Sirf aankhon ke area ke aas-paas halka eyelid/blink shutter effect (poore photo par nahi)
+    // Sirf aankhon ki line par blink shutter (head/forehead par nahi)
     if (this.blinkProgress > 0) {
       const factor = this.blinkProgress <= 1 ? this.blinkProgress : 2 - this.blinkProgress;
-      const eyeBandW = drawW * 0.36;
-      const eyeBandH = drawH * 0.08 * Math.min(1, factor);
+      const eyeBandW = drawW * 0.24;
+      const eyeBandH = drawH * 0.045 * Math.min(1, factor);
       const eyeCenterX = x + drawW * 0.5;
-      const eyeCenterY = y + drawH * 0.25;
+      const eyeCenterY = y + drawH * 0.36;
 
-      ctx.fillStyle = "rgba(7, 9, 15, 0.92)";
+      ctx.fillStyle = "rgba(7, 9, 15, 0.95)";
       ctx.fillRect(eyeCenterX - eyeBandW / 2, eyeCenterY - eyeBandH / 2, eyeBandW, eyeBandH);
     }
 
