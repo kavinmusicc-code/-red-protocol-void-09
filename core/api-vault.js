@@ -1,4 +1,4 @@
-﻿const STORAGE_KEY = "void09_byok_vault_v1";
+const STORAGE_KEY = "void09_byok_vault_v1";
 
 const DEFAULT_CONFIG = {
   provider: "openai",

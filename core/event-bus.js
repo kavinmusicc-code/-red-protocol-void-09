@@ -1,4 +1,4 @@
-﻿export class EventBus {
+export class EventBus {
   constructor() {
     this.listeners = new Map();
   }
