@@ -29,6 +29,30 @@ export class HudCanvas {
     this.evolutionPower = 148;
     this.upgradeLog = "UPGRADE #15 // OVERDRIVE CORE BOOST (+5 LVL) // PWR:148";
 
+    // External node links: Ollama, OpenClaw, Mythos
+    this.nodes = {
+      ollama: {
+        label: "OLLAMA",
+        url: "http://127.0.0.1:11434/api/tags",
+        model: "llama3.2",
+        status: "STANDBY"
+      },
+      openclaw: {
+        label: "OPENCLAW",
+        url: "http://127.0.0.1:8787/health",
+        mode: "AGENT_LINK",
+        status: "STANDBY"
+      },
+      mythos: {
+        label: "MYTHOS",
+        url: "http://127.0.0.1:9000/status",
+        core: "MYTHOS_ENGINE",
+        status: "STANDBY"
+      }
+    };
+    this.activeNode = "OLLAMA";
+    this.bridgeStatus = "NODES READY // OLLAMA + OPENCLAW + MYTHOS";
+
     // Error spark state (only on real errors)
     this.sparks = [];
     this.arcs = [];
@@ -55,6 +79,49 @@ export class HudCanvas {
     this._createScannerControls();
     this._initFaceDetector();
     this._bindGlobalErrors();
+  }
+
+  configureNode(nodeKey, patch = {}) {
+    const key = String(nodeKey || "").toLowerCase();
+    if (!this.nodes[key]) return null;
+    this.nodes[key] = { ...this.nodes[key], ...patch };
+    return this.nodes[key];
+  }
+
+  async pingNode(nodeKey) {
+    const key = String(nodeKey || "").toLowerCase();
+    const node = this.nodes[key];
+    if (!node) return false;
+    this.activeNode = node.label;
+    node.status = "PROBING";
+    this.bridgeStatus = `PROBING ${node.label}...`;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1800);
+    try {
+      await fetch(node.url, { method: "GET", mode: "no-cors", signal: controller.signal });
+      clearTimeout(timer);
+      node.status = "LINKED";
+      this.bridgeStatus = `${node.label} LINKED // READY`;
+      return true;
+    } catch {
+      clearTimeout(timer);
+      node.status = "OFFLINE/LOCAL";
+      this.bridgeStatus = `${node.label} UNREACHABLE (CHECK LOCAL SERVICE)`;
+      this.triggerSpark(`${node.label}_LINK_FAULT`, 1.1);
+      return false;
+    }
+  }
+
+  async syncAllNodes() {
+    this.bridgeStatus = "SYNCING OLLAMA + OPENCLAW + MYTHOS...";
+    await Promise.all([
+      this.pingNode("ollama"),
+      this.pingNode("openclaw"),
+      this.pingNode("mythos")
+    ]);
+    this.activeNode = "OLLAMA+OPENCLAW+MYTHOS";
+    this.bridgeStatus = `OL:${this.nodes.ollama.status} | OC:${this.nodes.openclaw.status} | MY:${this.nodes.mythos.status}`;
   }
 
   _bindGlobalErrors() {
@@ -149,10 +216,11 @@ export class HudCanvas {
       "right:14px",
       "z-index:20",
       "display:inline-flex",
-      "gap:6px",
+      "flex-wrap:wrap",
+      "gap:5px",
       "align-items:center",
       "font-family:monospace",
-      "font-size:11px"
+      "font-size:10px"
     ].join(";");
 
     const btn = document.createElement("button");
@@ -162,9 +230,9 @@ export class HudCanvas {
       "background:rgba(185,28,28,0.92)",
       "color:#fff",
       "border:1px solid rgba(254,202,202,0.7)",
-      "padding:5px 10px",
+      "padding:4px 8px",
       "cursor:pointer",
-      "letter-spacing:0.6px",
+      "letter-spacing:0.5px",
       "text-transform:uppercase"
     ].join(";");
 
@@ -179,7 +247,40 @@ export class HudCanvas {
       }
     });
 
+    const makeLinkBtn = (label, key) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = label;
+      b.style.cssText = [
+        "background:rgba(15,23,42,0.92)",
+        "color:#fca5a5",
+        "border:1px solid rgba(248,113,113,0.55)",
+        "padding:4px 7px",
+        "cursor:pointer",
+        "text-transform:uppercase"
+      ].join(";");
+      b.addEventListener("click", () => this.pingNode(key));
+      return b;
+    };
+
+    const syncBtn = document.createElement("button");
+    syncBtn.type = "button";
+    syncBtn.textContent = "SYNC ALL";
+    syncBtn.style.cssText = [
+      "background:rgba(127,29,29,0.92)",
+      "color:#fde047",
+      "border:1px solid rgba(253,224,71,0.65)",
+      "padding:4px 7px",
+      "cursor:pointer",
+      "text-transform:uppercase"
+    ].join(";");
+    syncBtn.addEventListener("click", () => this.syncAllNodes());
+
     bar.appendChild(btn);
+    bar.appendChild(makeLinkBtn("OLLAMA", "ollama"));
+    bar.appendChild(makeLinkBtn("OPENCLAW", "openclaw"));
+    bar.appendChild(makeLinkBtn("MYTHOS", "mythos"));
+    bar.appendChild(syncBtn);
     parent.appendChild(bar);
   }
 
@@ -420,7 +521,6 @@ export class HudCanvas {
     ctx.fillStyle = aura;
     ctx.fillRect(rx, ry, rw, rh);
 
-    // Outer rotating tactical halo ring
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate((now * 0.001) % (Math.PI * 2));
@@ -432,7 +532,6 @@ export class HudCanvas {
     ctx.stroke();
     ctx.restore();
 
-    // Level 11+ Tier-2 inner counter-rotating overdrive ring
     if (this.upgradeStep >= 11) {
       ctx.save();
       ctx.translate(cx, cy);
@@ -569,7 +668,6 @@ export class HudCanvas {
       ctx.lineWidth = 1.6;
       ctx.strokeRect(leftBox, topBox, fw, fh);
 
-      // Extra Tier-2 outer lock frame at LVL 15+
       if (this.upgradeStep >= 15) {
         ctx.strokeStyle = "rgba(253, 224, 71, 0.72)";
         ctx.lineWidth = 1.1;
@@ -733,7 +831,7 @@ export class HudCanvas {
     ctx.fillText(`VOID-09 v${(1 + this.upgradeStep * 0.1).toFixed(1)} (LVL ${this.upgradeStep}) // ${this.state}${sparkTag}`, pad + 12, height - pad - 21);
     ctx.fillStyle = "rgba(248, 113, 113, 0.85)";
     ctx.font = "10px monospace";
-    ctx.fillText(`${this.upgradeLog} | ${this.scannerStatus}`, pad + 12, height - pad - 8);
+    ctx.fillText(`${this.bridgeStatus} | ${this.scannerStatus}`, pad + 12, height - pad - 8);
 
     ctx.restore();
     ctx.restore();
