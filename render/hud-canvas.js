@@ -1,3 +1,4 @@
+import { mountDevilAvatar } from "./devil-avatar.js";
 export class HudCanvas {
   constructor(canvas) {
     this.canvas = canvas;
