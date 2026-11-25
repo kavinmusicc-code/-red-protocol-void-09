@@ -57,24 +57,37 @@
     import { watchdog } from "./core/watchdog.js";
     import { perfGovernor } from "./core/perf-governor.js";
     import { initApiGate } from "./ui/components/api-gate.js";
-    import { mountPredatorStage } from "./ui/views/predator-stage.js";
-    import { mountCommandDeck } from "./ui/components/command-deck.js";
-    import { mountBugWorkbench } from "./ui/components/bug-workbench.js";
-
-    watchdog.start();
-    perfGovernor.apply("lite");
 
     const statusEl = document.getElementById("vault-status");
     const reopenBtn = document.getElementById("reopen-gate-btn");
 
-    mountPredatorStage(document.getElementById("predator-stage-mount"));
-    mountCommandDeck(document.getElementById("command-deck-mount"));
-    mountBugWorkbench(document.getElementById("bug-workbench-mount"));
+    function showErr(id, label, err) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.innerHTML = `<div style="padding:10px;border:1px solid #d91e36;border-radius:6px;font-family:monospace;font-size:12px;color:#f2ece6;">[${label} ERROR] ${err?.message || err}</div>`;
+      }
+      console.error(label, err);
+    }
+
+    try { watchdog.start(); } catch (e) { console.error("watchdog:", e); }
+    try { perfGovernor.apply("lite"); } catch (e) { console.error("perfGovernor:", e); }
+
+    import("./ui/views/predator-stage.js")
+      .then((m) => m.mountPredatorStage(document.getElementById("predator-stage-mount")))
+      .catch((e) => showErr("predator-stage-mount", "PREDATOR STAGE", e));
+
+    import("./ui/components/command-deck.js")
+      .then((m) => m.mountCommandDeck(document.getElementById("command-deck-mount")))
+      .catch((e) => showErr("command-deck-mount", "COMMAND DECK", e));
+
+    import("./ui/components/bug-workbench.js")
+      .then((m) => m.mountBugWorkbench(document.getElementById("bug-workbench-mount")))
+      .catch((e) => showErr("bug-workbench-mount", "BUG WORKBENCH", e));
 
     function updateStatus(cfg) {
       if (!statusEl) return;
       if (cfg && cfg.apiKey) {
-        statusEl.textContent = KEY:  ();
+        statusEl.textContent = `KEY: ${cfg.provider.toUpperCase()} (${apiVault.maskedKey()})`;
       } else {
         statusEl.textContent = "KEY: LITE / LOCKED";
       }
@@ -87,4 +100,5 @@
   </script>
 </body>
 </html>
+
 
