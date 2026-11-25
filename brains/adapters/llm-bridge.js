@@ -1,11 +1,4 @@
-export class LlmBridge {
-  constructor() {
-    this.endpoints = {
-      openai: "https://api.openai.com/v1/chat/completions",
-      openrouter: "https://openrouter.ai/api/v1/chat/completions"
-    };
-  }
-
+﻿export class LlmBridge {
   async complete(opts) {
     const provider = opts && opts.provider ? opts.provider : "openai";
     const apiKey = opts && opts.apiKey ? opts.apiKey : "";
@@ -14,64 +7,39 @@ export class LlmBridge {
     const systemPrompt = opts && opts.systemPrompt ? opts.systemPrompt : "";
 
     if (!apiKey) {
-      return {
-        ok: false,
-        text: "No API key configured. Running in Lite Mode."
-      };
+      return { ok: false, text: "No API key configured. Running in Lite Mode." };
     }
 
     if (provider === "gemini") {
-      const targetModel = model || "gemini-2.5-flash";
-      const baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/";
-      const url = baseUrl + encodeURIComponent(targetModel) + ":generateContent?key=" + encodeURIComponent(apiKey);
-      const fullPrompt = systemPrompt ? (systemPrompt + "\n\n" + prompt) : prompt;
-
-      const res = await fetch(url, {
+      const m = model || "gemini-2.5-flash";
+      const u = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(m) + ":generateContent?key=" + encodeURIComponent(apiKey);
+      const txt = systemPrompt ? (systemPrompt + "\n\n" + prompt) : prompt;
+      const r = await fetch(u, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt }] }]
-        })
+        body: JSON.stringify({ contents: [{ parts: [{ text: txt }] }] })
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        const errMsg = data && data.error && data.error.message ? data.error.message : "Gemini request failed";
-        throw new Error(errMsg);
-      }
-
-      const cand = data && data.candidates && data.candidates[0];
-      const part = cand && cand.content && cand.content.parts && cand.content.parts[0];
-      const text = part && part.text ? part.text : "";
-      return { ok: true, text: text, provider: "gemini", model: targetModel };
+      const d = await r.json();
+      if (!r.ok) throw new Error((d && d.error && d.error.message) || "Gemini request failed");
+      const out = d && d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts && d.candidates[0].content.parts[0] && d.candidates[0].content.parts[0].text ? d.candidates[0].content.parts[0].text : "";
+      return { ok: true, text: out, provider: "gemini", model: m };
     }
 
-    const url = this.endpoints[provider] || this.endpoints.openai;
-    const targetModel = model || (provider === "openrouter" ? "openai/gpt-4o-mini" : "gpt-4o-mini");
-    const messages = [];
-    if (systemPrompt) {
-      messages.push({ role: "system", content: systemPrompt });
-    }
-    messages.push({ role: "user", content: prompt });
+    const base = provider === "openrouter" ? "https://openrouter.ai/api/v1/chat/completions" : "https://api.openai.com/v1/chat/completions";
+    const m = model || (provider === "openrouter" ? "openai/gpt-4o-mini" : "gpt-4o-mini");
+    const msgs = [];
+    if (systemPrompt) msgs.push({ role: "system", content: systemPrompt });
+    msgs.push({ role: "user", content: prompt });
 
-    const res = await fetch(url, {
+    const r = await fetch(base, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + apiKey
-      },
-      body: JSON.stringify({ model: targetModel, messages: messages })
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+      body: JSON.stringify({ model: m, messages: msgs })
     });
-
-    const data = await res.json();
-    if (!res.ok) {
-      const errMsg = data && data.error && data.error.message ? data.error.message : "LLM request failed";
-      throw new Error(errMsg);
-    }
-
-    const choice = data && data.choices && data.choices[0];
-    const text = choice && choice.message && choice.message.content ? choice.message.content : "";
-    return { ok: true, text: text, provider: provider, model: targetModel };
+    const d = await r.json();
+    if (!r.ok) throw new Error((d && d.error && d.error.message) || "LLM request failed");
+    const out = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content ? d.choices[0].message.content : "";
+    return { ok: true, text: out, provider: provider, model: m };
   }
 }
 
