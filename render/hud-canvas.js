@@ -29,7 +29,12 @@ export class HudCanvas {
     this.lastUpgradeAt = performance.now();
     this.upgradeStep = 1;
     this.evolutionPower = this.baseHorsepower;
-    this.upgradeLog = `UPGRADE #1 // 12 LAKH CRORE HP // PWR:${this._formatPower(this.evolutionPower)}`;
+
+    // Collective cognition & instinct scale: 20,000 humans (mind + action) & 10,000 animals (perception)
+    this.humanCognitionCount = 20000;
+    this.humanActionPower = 20000;
+    this.animalPerceptionCount = 10000;
+    this.upgradeLog = `UPGRADE #1 // 20K HUMAN + 10K ANIMAL MATRIX // ${this._formatPower(this.evolutionPower)}`;
 
     // Robot Voice state
     this.voiceEnabled = true;
@@ -101,7 +106,7 @@ export class HudCanvas {
     };
     this._drawerInputs = null;
     this.activeNode = "OLLAMA+OPENCLAW+MYTHOS+GROK";
-    this.bridgeStatus = `100% // ${this._formatPower(this.evolutionPower)} // 2X SELF-UPGRADE ACTIVE`;
+    this.bridgeStatus = `${this._formatPower(this.evolutionPower)} // 20K HUMANS + 10K ANIMALS // 2X LOOP`;
 
     // Error spark state (only on real errors)
     this.sparks = [];
@@ -146,11 +151,14 @@ export class HudCanvas {
     const current = Number(this.evolutionPower) || this.baseHorsepower;
     const next = current * 2;
     this.evolutionPower = Number.isFinite(next) ? next : current;
-    this.upgradeLog = `UPGRADE #${this.upgradeStep} // 2X DOUBLED // ${this._formatPower(this.evolutionPower)}`;
-    this.bridgeStatus = `100% // ${this._formatPower(this.evolutionPower)} // STEP #${this.upgradeStep} (2X)`;
+    this.humanCognitionCount = Math.min(20000000, this.humanCognitionCount * 2);
+    this.humanActionPower = Math.min(20000000, this.humanActionPower * 2);
+    this.animalPerceptionCount = Math.min(10000000, this.animalPerceptionCount * 2);
+    this.upgradeLog = `UPGRADE #${this.upgradeStep} // 20K+10K 2X // ${this._formatPower(this.evolutionPower)}`;
+    this.bridgeStatus = `${this._formatPower(this.evolutionPower)} // 20K HUMANS + 10K ANIMALS // STEP #${this.upgradeStep}`;
     this.triggerSpark(reason, 1.35);
     if (announce) {
-      this.speak(`Upgrade ${this.upgradeStep}. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
+      this.speak(`Upgrade ${this.upgradeStep}. Twenty thousand human minds and ten thousand animal instincts online. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
     }
     return this.evolutionPower;
   }
@@ -212,7 +220,7 @@ export class HudCanvas {
         const query = cmdInput ? String(cmdInput.value).trim() : "";
         this.doubleAndUpgrade("EXECUTE_2X_SURGE", false);
         if (query) {
-          this.speak(`Executing on VOID-09. Power doubled to ${this._formatPower(this.evolutionPower)}. ${query.slice(0, 80)}`);
+          this.speak(`Executing with twenty thousand human minds, action force, and ten thousand animal instincts. ${query.slice(0, 75)}`);
         } else {
           this.speak(`VOID-09 surge active. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
         }
@@ -325,7 +333,7 @@ export class HudCanvas {
         this.speak(`Detected ${found.join(" and ")}.`);
       }
     } else {
-      this.bridgeStatus = `100% // ${this._formatPower(this.evolutionPower)} // OLLAMA LOCAL + GROK READY`;
+      this.bridgeStatus = `100% // ${this._formatPower(this.evolutionPower)} // 20K HUMANS + 10K ANIMALS`;
       if (!silentSpark) {
         this.triggerSpark("AUTO_DETECT_NONE", 1.0);
         this.speak("Scan complete. Enter required API keys for OpenClaw, Mythos, and Grok.");
@@ -563,7 +571,7 @@ export class HudCanvas {
     ].join(";");
 
     const reqBanner = document.createElement("div");
-    reqBanner.textContent = `100% CORE // ${this._formatPower(this.evolutionPower)} // 2X LOOP`;
+    reqBanner.textContent = `20K HUMAN + 10K ANIMAL // ${this._formatPower(this.evolutionPower)}`;
     reqBanner.style.cssText = "color:#fde047;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid rgba(248,113,113,0.3);";
     drawer.appendChild(reqBanner);
 
@@ -1041,7 +1049,7 @@ export class HudCanvas {
     ctx.fillStyle = "rgba(253, 224, 71, 0.95)";
     ctx.font = "10px monospace";
     const voiceTag = this.voiceSpeaking ? " // 🔊 SPEAKING" : (this.voiceEnabled ? " // VOICE:ON" : " // VOICE:OFF");
-    ctx.fillText(`CORE // VOID-09 // ${this._formatPower(this.evolutionPower)}${voiceTag}`, rx + 10, ry + 18);
+    ctx.fillText(`CORE // 20K H + 10K A // ${this._formatPower(this.evolutionPower)}${voiceTag}`, rx + 10, ry + 18);
 
     ctx.restore();
   }
