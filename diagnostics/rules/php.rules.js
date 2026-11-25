@@ -1,20 +1,25 @@
-﻿export const phpRules = [
+export const phpRules = [
   {
-    id: "php-short-open",
-    severity: "low",
-    pattern: /<\?(?!php|=)/m,
-    message: "PHP short open tag '<?' found; prefer '<?php' for portability."
-  },
-  {
-    id: "php-raw-echo-input",
-    severity: "critical",
-    pattern: /\becho\s+\(GET|POST|REQUEST|COOKIE)\b/i,
-    message: "Direct output of superglobal input detected; sanitize/escape (XSS risk)."
-  },
-  {
-    id: "php-sql-concat-var",
+    id: "PHP-RCE-01",
+    language: "php",
     severity: "high",
-    pattern: /(mysqli_query|query)\s*\(\s*[^,]+,\s*["'][^"']*\(GET|POST|REQUEST)/i,
-    message: "User input interpolated directly into SQL query; use prepared statements."
+    pattern: /\b(eval|exec|shell_exec|system|passthru|proc_open|popen)\s*\(/i,
+    message: "Avoid dynamic command or code execution functions without strict allowlisting."
+  },
+  {
+    id: "PHP-XSS-02",
+    language: "php",
+    severity: "medium",
+    pattern: /\becho\s+\(?:GET|POST|REQUEST|COOKIE)\b/i,
+    message: "Escape user-controlled superglobal output before rendering in HTML."
+  },
+  {
+    id: "PHP-SQLI-03",
+    language: "php",
+    severity: "high",
+    pattern: /(?:mysqli_query|query)\s*\([^)]*\(?:GET|POST|REQUEST)\b/i,
+    message: "Use parameterized prepared statements instead of direct superglobal concatenation."
   }
 ];
+
+export default phpRules;

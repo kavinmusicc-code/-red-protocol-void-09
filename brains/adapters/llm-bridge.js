@@ -1,71 +1,62 @@
-﻿import { apiVault } from "../../core/api-vault.js";
-import { getProviderConfig } from "./provider-registry.js";
-import { localEngine } from "./local-engine.js";
-
 export class LlmBridge {
-  async generate({ prompt, systemPrompt = "", brain = "predator", customEndpoint = "" }) {
-    const cfg = apiVault.load();
-    if (!cfg.apiKey) {
-      return localEngine.respond({ prompt, brain });
+  constructor() {
+    this.endpointMap = {
+      openai: "https://api.openai.com/v1/chat/completions",
+      openrouter: "https://openrouter.ai/api/v1/chat/completions"
+    };
+  }
+
+  async complete({ provider = "openai", apiKey = "", model = "", prompt = "", systemPrompt = "" }) {
+    if (!apiKey) {
+      return {
+        ok: false,
+        text: "No API key configured. Running in Lite Mode."
+      };
     }
 
-    const provider = getProviderConfig(cfg.provider);
-    const model = cfg.model || provider.defaultModel;
-
-    if (cfg.provider === "gemini") {
-      const baseUrl = provider.endpoint;
-      const url = ${baseUrl}/:generateContent?key=;
-      const mergedText = systemPrompt ? ${systemPrompt}\n\n : prompt;
-
+    if (provider === "gemini") {
+      const targetModel = model || "gemini-2.5-flash";
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(targetModel) + ":generateContent?key=" + encodeURIComponent(apiKey);
+      const body = {
+        contents: [{ parts: [{ text: (systemPrompt ? systemPrompt + "\n\n" : "") + prompt }] }]
+      };
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: mergedText }] }]
-        })
+        body: JSON.stringify(body)
       });
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => res.statusText);
-        throw new Error(Gemini API : );
-      }
-
       const data = await res.json();
-      const text =
-        data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-        "Empty response received from Gemini.";
-      return { source: yok::, brain, text };
+      if (!res.ok) {
+        throw new Error(data?.error?.message || "Gemini request failed");
+      }
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      return { ok: true, text: text, provider: "gemini", model: targetModel };
     }
 
-    const endpoint = customEndpoint || provider.endpoint;
-    if (!endpoint) {
-      throw new Error("Custom endpoint is missing.");
-    }
-
+    const url = this.endpointMap[provider] || this.endpointMap.openai;
+    const targetModel = model || (provider === "openrouter" ? "openai/gpt-4o-mini" : "gpt-4o-mini");
     const messages = [];
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
     messages.push({ role: "user", content: prompt });
 
-    const res = await fetch(endpoint, {
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: Bearer 
+        "Authorization": "Bearer " + apiKey
       },
-      body: JSON.stringify({ model, messages })
+      body: JSON.stringify({ model: targetModel, messages: messages })
     });
 
+    const data = await res.json();
     if (!res.ok) {
-      const errText = await res.text().catch(() => res.statusText);
-      throw new Error(Provider API : );
+      throw new Error(data?.error?.message || "LLM request failed");
     }
 
-    const data = await res.json();
-    const text =
-      data?.choices?.[0]?.message?.content ||
-      "Empty response received from model.";
-    return { source: yok::, brain, text };
+    const text = data?.choices?.[0]?.message?.content || "";
+    return { ok: true, text: text, provider: provider, model: targetModel };
   }
 }
 
 export const llmBridge = new LlmBridge();
+export default llmBridge;
