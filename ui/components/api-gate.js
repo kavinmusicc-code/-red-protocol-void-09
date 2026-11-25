@@ -1,70 +1,60 @@
 ﻿import { apiVault } from "../../core/api-vault.js";
 
-export function initApiGate(onUnlock) {
+export function initApiGate(onReady) {
   const backdrop = document.getElementById("api-gate");
   const form = document.getElementById("api-gate-form");
   const providerEl = document.getElementById("api-provider");
   const modelEl = document.getElementById("api-model");
   const keyEl = document.getElementById("api-key-input");
-  const clearBtn = document.getElementById("api-clear-btn");
   const msgEl = document.getElementById("api-gate-msg");
+  const clearBtn = document.getElementById("api-clear-btn");
 
-  if (!backdrop || !form || !keyEl) return;
+  if (!backdrop || !form) return null;
 
-  function syncFromVault() {
-    const current = apiVault.load();
-    if (providerEl) providerEl.value = current.provider;
-    if (modelEl) modelEl.value = current.model;
-    keyEl.value = current.apiKey;
-  }
+  const close = () => {
+    backdrop.style.display = "none";
+  };
 
-  function open() {
-    syncFromVault();
+  const open = () => {
+    const saved = apiVault.load();
+    if (providerEl) providerEl.value = saved.provider || "openai";
+    if (modelEl) modelEl.value = saved.model || "";
+    if (keyEl) keyEl.value = saved.apiKey || "";
     if (msgEl) msgEl.textContent = "";
-    backdrop.hidden = false;
-    keyEl.focus();
-  }
-
-  function close() {
-    backdrop.hidden = true;
-  }
+    backdrop.style.display = "flex";
+  };
 
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    const key = keyEl.value.trim();
-    if (!key) {
-      if (msgEl) msgEl.textContent = "API key required to unlock VOID-09.";
+    const provider = providerEl?.value || "openai";
+    const model = modelEl?.value.trim() || "";
+    const apiKey = keyEl?.value.trim() || "";
+
+    if (!apiKey) {
+      apiVault.clear();
+      close();
+      if (typeof onReady === "function") onReady(apiVault.load());
       return;
     }
 
-    const saved = apiVault.save({
-      provider: providerEl ? providerEl.value : "openai",
-      model: modelEl ? modelEl.value : "",
-      apiKey: key
-    });
-
+    const saved = apiVault.save({ provider, model, apiKey });
     close();
-    if (typeof onUnlock === "function") {
-      onUnlock(saved);
-    }
+    if (typeof onReady === "function") onReady(saved);
   });
 
   if (clearBtn) {
     clearBtn.addEventListener("click", () => {
       apiVault.clear();
-      keyEl.value = "";
-      if (msgEl) msgEl.textContent = "Local key wiped.";
+      if (keyEl) keyEl.value = "";
+      if (modelEl) modelEl.value = "";
+      close();
+      if (typeof onReady === "function") onReady(apiVault.load());
     });
   }
 
-  if (!apiVault.hasKey()) {
-    open();
-  } else {
-    close();
-    if (typeof onUnlock === "function") {
-      onUnlock(apiVault.load());
-    }
-  }
+  // Start directly in unlocked Lite / Saved mode without blocking the screen
+  close();
+  if (typeof onReady === "function") onReady(apiVault.load());
 
   return { open, close };
 }
