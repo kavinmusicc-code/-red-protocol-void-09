@@ -1,0 +1,72 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RED PROTOCOL // VOID-09</title>
+  <link rel="stylesheet" href="ui/styles/variables.css" />
+  <link rel="stylesheet" href="ui/styles/layout.css" />
+</head>
+<body>
+  <div class="void-shell">
+    <header class="void-header">
+      <div class="void-title">RED PROTOCOL // VOID-09</div>
+      <div class="void-status" id="vault-status">KEY: LOCKED</div>
+    </header>
+
+    <main class="void-main" id="void-stage">
+      <p>Phase 1 foundation initialized. Attach API key to unlock AI core.</p>
+    </main>
+  </div>
+
+  <div class="api-gate-backdrop" id="api-gate" role="dialog" aria-modal="true" aria-labelledby="gate-heading">
+    <form class="api-gate-card" id="api-gate-form">
+      <h2 id="gate-heading">BYOK // ATTACH API KEY</h2>
+      <p>Your API key stays in your browser's local storage only—never hardcoded in the repo.</p>
+
+      <label for="api-provider">Provider</label>
+      <select id="api-provider">
+        <option value="openai">OpenAI</option>
+        <option value="gemini">Google Gemini</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="custom">Custom / Compatible</option>
+      </select>
+
+      <label for="api-model">Model (Optional)</label>
+      <input id="api-model" type="text" placeholder="e.g. gpt-4o-mini or gemini-2.5-flash" />
+
+      <label for="api-key-input">API Key</label>
+      <input id="api-key-input" type="password" placeholder="Paste your API key here..." autocomplete="off" />
+
+      <div class="gate-msg" id="api-gate-msg"></div>
+
+      <div class="api-gate-actions">
+        <button type="submit" class="btn-crimson">UNLOCK CORE</button>
+        <button type="button" class="btn-ghost" id="api-clear-btn">CLEAR</button>
+      </div>
+    </form>
+  </div>
+
+  <script type="module">
+    import { apiVault } from "./core/api-vault.js";
+    import { initApiGate } from "./ui/components/api-gate.js";
+
+    const statusEl = document.getElementById("vault-status");
+    const stageEl = document.getElementById("void-stage");
+
+    function updateStatus(cfg) {
+      if (!statusEl) return;
+      if (cfg && cfg.apiKey) {
+        statusEl.textContent = KEY:  ();
+        if (stageEl) {
+          stageEl.innerHTML = <p>VOID-09 unlocked in BYOK mode. Ready for multi-brain & bug-hunting modules.</p>;
+        }
+      } else {
+        statusEl.textContent = "KEY: LOCKED";
+      }
+    }
+
+    initApiGate(updateStatus);
+  </script>
+</body>
+</html>

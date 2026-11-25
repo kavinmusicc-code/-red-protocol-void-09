@@ -1,0 +1,150 @@
+﻿*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--bg-void);
+  color: var(--text-bone);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+}
+
+.void-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  gap: 16px;
+}
+
+.void-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-crimson);
+  border-radius: 8px;
+}
+
+.void-title {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  color: var(--accent-crimson);
+}
+
+.void-status {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.void-main {
+  flex: 1;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.api-gate-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 7, 9, 0.92);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.api-gate-backdrop[hidden] {
+  display: none;
+}
+
+.api-gate-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-crimson);
+  box-shadow: 0 0 28px var(--accent-glow);
+  border-radius: 10px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.api-gate-card h2 {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  color: var(--text-bone);
+}
+
+.api-gate-card p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.api-gate-card label {
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  color: var(--text-bone);
+}
+
+.api-gate-card input,
+.api-gate-card select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-void);
+  color: var(--text-bone);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.api-gate-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.btn-crimson {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--accent-crimson);
+  background: var(--accent-crimson-dark);
+  color: var(--text-bone);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-crimson:hover {
+  background: var(--accent-crimson);
+}
+
+.btn-ghost {
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.gate-msg {
+  min-height: 18px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--accent-crimson);
+}

@@ -1,0 +1,14 @@
+﻿:root {
+  --bg-void: #070709;
+  --bg-panel: #0e0e13;
+  --bg-elevated: #15151d;
+  --text-bone: #f2ece6;
+  --text-muted: #9a949c;
+  --accent-crimson: #d91e36;
+  --accent-crimson-dark: #7d0d1d;
+  --accent-glow: rgba(217, 30, 54, 0.28);
+  --border-subtle: rgba(242, 236, 230, 0.12);
+  --border-crimson: rgba(217, 30, 54, 0.55);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
