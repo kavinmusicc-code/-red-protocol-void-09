@@ -29,32 +29,36 @@ export class HudCanvas {
     this.evolutionPower = 148;
     this.upgradeLog = "UPGRADE #15 // OVERDRIVE CORE BOOST (+5 LVL) // PWR:148";
 
-    // User-configurable node links & keys: Ollama, OpenClaw, Mythos
+    // Required user-configurable node links & optional keys: Ollama, OpenClaw, Mythos
+    this.requiredNodes = ["ollama", "openclaw", "mythos"];
     this.nodes = {
       ollama: {
         label: "OLLAMA",
         url: "http://127.0.0.1:11434/api/tags",
         apiKey: "",
+        required: true,
         model: "llama3.2",
-        status: "STANDBY"
+        status: "REQUIRED"
       },
       openclaw: {
         label: "OPENCLAW",
         url: "http://127.0.0.1:8787/health",
         apiKey: "",
+        required: true,
         mode: "AGENT_LINK",
-        status: "STANDBY"
+        status: "REQUIRED"
       },
       mythos: {
         label: "MYTHOS",
         url: "http://127.0.0.1:9000/status",
         apiKey: "",
+        required: true,
         core: "MYTHOS_ENGINE",
-        status: "STANDBY"
+        status: "REQUIRED"
       }
     };
-    this.activeNode = "OLLAMA";
-    this.bridgeStatus = "NODES READY // OLLAMA + OPENCLAW + MYTHOS";
+    this.activeNode = "OLLAMA+OPENCLAW+MYTHOS";
+    this.bridgeStatus = "REQUIRED LINKS: OLLAMA + OPENCLAW + MYTHOS";
 
     // Error spark state (only on real errors)
     this.sparks = [];
@@ -84,6 +88,30 @@ export class HudCanvas {
     this._bindGlobalErrors();
   }
 
+  getMissingRequiredNodes() {
+    return this.requiredNodes.filter((key) => {
+      const node = this.nodes[key];
+      return !node || !node.url || !String(node.url).trim();
+    });
+  }
+
+  validateRequiredNodes() {
+    const missing = this.getMissingRequiredNodes();
+    this.requiredNodes.forEach((key) => {
+      const node = this.nodes[key];
+      if (!node.url || !String(node.url).trim()) {
+        node.status = "MISSING_REQUIRED";
+      }
+    });
+    if (missing.length > 0) {
+      const labels = missing.map((k) => this.nodes[k].label).join(" + ");
+      this.bridgeStatus = `REQUIRED MISSING: ${labels}`;
+      this.triggerSpark("REQUIRED_NODE_MISSING", 1.15);
+      return false;
+    }
+    return true;
+  }
+
   configureNode(nodeKey, patch = {}) {
     const key = String(nodeKey || "").toLowerCase();
     if (!this.nodes[key]) return null;
@@ -96,14 +124,15 @@ export class HudCanvas {
     const node = this.nodes[key];
     if (!node) return false;
     if (!node.url || !String(node.url).trim()) {
-      node.status = "NO_LINK";
-      this.bridgeStatus = `${node.label} LINK MISSING`;
+      node.status = "MISSING_REQUIRED";
+      this.bridgeStatus = `${node.label} LINK IS REQUIRED`;
+      this.triggerSpark(`${node.label}_REQUIRED`, 1.1);
       return false;
     }
 
     this.activeNode = node.label;
     node.status = "PROBING";
-    this.bridgeStatus = `PROBING ${node.label}...`;
+    this.bridgeStatus = `PROBING ${node.label} [REQUIRED]...`;
 
     const headers = {};
     if (node.apiKey && String(node.apiKey).trim()) {
@@ -133,7 +162,10 @@ export class HudCanvas {
   }
 
   async syncAllNodes() {
-    this.bridgeStatus = "SYNCING OLLAMA + OPENCLAW + MYTHOS...";
+    if (!this.validateRequiredNodes()) {
+      return false;
+    }
+    this.bridgeStatus = "SYNCING REQUIRED: OLLAMA + OPENCLAW + MYTHOS...";
     await Promise.all([
       this.pingNode("ollama"),
       this.pingNode("openclaw"),
@@ -141,6 +173,7 @@ export class HudCanvas {
     ]);
     this.activeNode = "OLLAMA+OPENCLAW+MYTHOS";
     this.bridgeStatus = `OL:${this.nodes.ollama.status} | OC:${this.nodes.openclaw.status} | MY:${this.nodes.mythos.status}`;
+    return true;
   }
 
   _bindGlobalErrors() {
@@ -274,7 +307,7 @@ export class HudCanvas {
       "top:42px",
       "right:14px",
       "z-index:25",
-      "width:280px",
+      "width:290px",
       "background:rgba(8,11,20,0.96)",
       "border:1px solid rgba(248,113,113,0.65)",
       "padding:8px",
@@ -283,20 +316,29 @@ export class HudCanvas {
       "color:#fecaca"
     ].join(";");
 
+    const reqBanner = document.createElement("div");
+    reqBanner.textContent = "ALL 3 REQUIRED: OLLAMA + OPENCLAW + MYTHOS";
+    reqBanner.style.cssText = "color:#fca5a5;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid rgba(248,113,113,0.25);";
+    drawer.appendChild(reqBanner);
+
+    const reqErrorEl = document.createElement("div");
+    reqErrorEl.style.cssText = "display:none;color:#fde047;background:rgba(127,29,29,0.55);border:1px solid rgba(253,224,71,0.5);padding:4px 5px;margin-bottom:6px;";
+
     const inputs = {};
-    ["ollama", "openclaw", "mythos"].forEach((key) => {
+    this.requiredNodes.forEach((key) => {
       const row = document.createElement("div");
       row.style.cssText = "margin-bottom:6px;";
 
       const title = document.createElement("div");
-      title.textContent = `${this.nodes[key].label} LINK`;
-      title.style.cssText = "color:#fde047;margin-bottom:2px;";
+      title.innerHTML = `<span style="color:#fde047;">${this.nodes[key].label}</span> <span style="color:#f87171;">* REQUIRED</span>`;
+      title.style.cssText = "margin-bottom:2px;";
 
       const urlInput = document.createElement("input");
       urlInput.type = "text";
-      urlInput.placeholder = `${this.nodes[key].label} URL`;
+      urlInput.required = true;
+      urlInput.placeholder = `${this.nodes[key].label} URL (REQUIRED)`;
       urlInput.value = this.nodes[key].url;
-      urlInput.style.cssText = "width:100%;box-sizing:border-box;background:#05070d;color:#fff;border:1px solid rgba(248,113,113,0.4);padding:3px 5px;margin-bottom:2px;font-size:10px;";
+      urlInput.style.cssText = "width:100%;box-sizing:border-box;background:#05070d;color:#fff;border:1px solid rgba(248,113,113,0.55);padding:3px 5px;margin-bottom:2px;font-size:10px;";
 
       const keyInput = document.createElement("input");
       keyInput.type = "password";
@@ -311,17 +353,28 @@ export class HudCanvas {
       drawer.appendChild(row);
     });
 
+    drawer.appendChild(reqErrorEl);
+
     const saveBtn = document.createElement("button");
     saveBtn.type = "button";
-    saveBtn.textContent = "APPLY & SYNC LINKS";
+    saveBtn.textContent = "APPLY & SYNC REQUIRED NODES";
     saveBtn.style.cssText = "width:100%;background:rgba(185,28,28,0.92);color:#fff;border:1px solid rgba(254,202,202,0.7);padding:4px 6px;cursor:pointer;";
     saveBtn.addEventListener("click", () => {
-      ["ollama", "openclaw", "mythos"].forEach((key) => {
+      this.requiredNodes.forEach((key) => {
         this.configureNode(key, {
           url: inputs[key].urlInput.value.trim(),
           apiKey: inputs[key].keyInput.value
         });
       });
+      const missing = this.getMissingRequiredNodes();
+      if (missing.length > 0) {
+        const names = missing.map((k) => this.nodes[k].label).join(", ");
+        reqErrorEl.textContent = `REQUIRED LINK MISSING: ${names}`;
+        reqErrorEl.style.display = "block";
+        this.validateRequiredNodes();
+        return;
+      }
+      reqErrorEl.style.display = "none";
       this.syncAllNodes();
       drawer.style.display = "none";
     });
@@ -329,7 +382,7 @@ export class HudCanvas {
 
     const linksToggleBtn = document.createElement("button");
     linksToggleBtn.type = "button";
-    linksToggleBtn.textContent = "LINKS / KEYS";
+    linksToggleBtn.textContent = "LINKS*";
     linksToggleBtn.style.cssText = [
       "background:rgba(15,23,42,0.92)",
       "color:#fde047",
@@ -339,13 +392,14 @@ export class HudCanvas {
       "text-transform:uppercase"
     ].join(";");
     linksToggleBtn.addEventListener("click", () => {
+      reqErrorEl.style.display = "none";
       drawer.style.display = drawer.style.display === "none" ? "block" : "none";
     });
 
     const makeLinkBtn = (label, key) => {
       const b = document.createElement("button");
       b.type = "button";
-      b.textContent = label;
+      b.textContent = `${label}*`;
       b.style.cssText = [
         "background:rgba(15,23,42,0.92)",
         "color:#fca5a5",
@@ -360,7 +414,7 @@ export class HudCanvas {
 
     const syncBtn = document.createElement("button");
     syncBtn.type = "button";
-    syncBtn.textContent = "SYNC ALL";
+    syncBtn.textContent = "SYNC ALL*";
     syncBtn.style.cssText = [
       "background:rgba(127,29,29,0.92)",
       "color:#fde047",
@@ -369,7 +423,16 @@ export class HudCanvas {
       "cursor:pointer",
       "text-transform:uppercase"
     ].join(";");
-    syncBtn.addEventListener("click", () => this.syncAllNodes());
+    syncBtn.addEventListener("click", () => {
+      if (!this.validateRequiredNodes()) {
+        drawer.style.display = "block";
+        const missing = this.getMissingRequiredNodes().map((k) => this.nodes[k].label).join(", ");
+        reqErrorEl.textContent = `REQUIRED LINK MISSING: ${missing}`;
+        reqErrorEl.style.display = "block";
+        return;
+      }
+      this.syncAllNodes();
+    });
 
     bar.appendChild(btn);
     bar.appendChild(linksToggleBtn);
