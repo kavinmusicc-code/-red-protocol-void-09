@@ -3,7 +3,7 @@ export const phpRules = [
     id: "PHP-RCE-01",
     language: "php",
     severity: "high",
-    pattern: /\b(eval|exec|shell_exec|system|passthru|proc_open|popen)\s*\(/i,
+    pattern: /\b(eval|exec|shell_exec|system|passthru|proc_open|popen)\b/i,
     message: "Avoid dynamic command or code execution functions without strict allowlisting."
   },
   {
@@ -17,8 +17,8 @@ export const phpRules = [
     id: "PHP-SQLI-03",
     language: "php",
     severity: "high",
-    pattern: /(mysqli_query|query)\s*\([^)]*\$_(GET|POST|REQUEST)\b/i,
-    message: "Use parameterized prepared statements instead of direct superglobal concatenation."
+    pattern: /\b(mysqli_query|mysql_query|pg_query)\b/i,
+    message: "Verify parameterized prepared statements are used instead of direct SQL concatenation."
   }
 ];
 

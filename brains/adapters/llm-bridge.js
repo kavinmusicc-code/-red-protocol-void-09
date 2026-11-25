@@ -1,17 +1,17 @@
 export class LlmBridge {
   constructor() {
-    this.endpointMap = {
+    this.endpoints = {
       openai: "https://api.openai.com/v1/chat/completions",
       openrouter: "https://openrouter.ai/api/v1/chat/completions"
     };
   }
 
   async complete(opts) {
-    const provider = (opts && opts.provider) || "openai";
-    const apiKey = (opts && opts.apiKey) || "";
-    const model = (opts && opts.model) || "";
-    const prompt = (opts && opts.prompt) || "";
-    const systemPrompt = (opts && opts.systemPrompt) || "";
+    const provider = opts && opts.provider ? opts.provider : "openai";
+    const apiKey = opts && opts.apiKey ? opts.apiKey : "";
+    const model = opts && opts.model ? opts.model : "";
+    const prompt = opts && opts.prompt ? opts.prompt : "";
+    const systemPrompt = opts && opts.systemPrompt ? opts.systemPrompt : "";
 
     if (!apiKey) {
       return {
@@ -22,28 +22,36 @@ export class LlmBridge {
 
     if (provider === "gemini") {
       const targetModel = model || "gemini-2.5-flash";
-      const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(targetModel) + ":generateContent?key=" + encodeURIComponent(apiKey);
-      const combinedText = systemPrompt ? (systemPrompt + "\n\n" + prompt) : prompt;
-      const body = {
-        contents: [{ parts: [{ text: combinedText }] }]
-      };
+      const baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/";
+      const url = baseUrl + encodeURIComponent(targetModel) + ":generateContent?key=" + encodeURIComponent(apiKey);
+      const fullPrompt = systemPrompt ? (systemPrompt + "\n\n" + prompt) : prompt;
+
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }] }]
+        })
       });
+
       const data = await res.json();
       if (!res.ok) {
-        throw new Error((data && data.error && data.error.message) || "Gemini request failed");
+        const errMsg = data && data.error && data.error.message ? data.error.message : "Gemini request failed";
+        throw new Error(errMsg);
       }
-      const text = (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || "";
+
+      const cand = data && data.candidates && data.candidates[0];
+      const part = cand && cand.content && cand.content.parts && cand.content.parts[0];
+      const text = part && part.text ? part.text : "";
       return { ok: true, text: text, provider: "gemini", model: targetModel };
     }
 
-    const url = this.endpointMap[provider] || this.endpointMap.openai;
+    const url = this.endpoints[provider] || this.endpoints.openai;
     const targetModel = model || (provider === "openrouter" ? "openai/gpt-4o-mini" : "gpt-4o-mini");
     const messages = [];
-    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    if (systemPrompt) {
+      messages.push({ role: "system", content: systemPrompt });
+    }
     messages.push({ role: "user", content: prompt });
 
     const res = await fetch(url, {
@@ -57,10 +65,12 @@ export class LlmBridge {
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error((data && data.error && data.error.message) || "LLM request failed");
+      const errMsg = data && data.error && data.error.message ? data.error.message : "LLM request failed";
+      throw new Error(errMsg);
     }
 
-    const text = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
+    const choice = data && data.choices && data.choices[0];
+    const text = choice && choice.message && choice.message.content ? choice.message.content : "";
     return { ok: true, text: text, provider: provider, model: targetModel };
   }
 }
