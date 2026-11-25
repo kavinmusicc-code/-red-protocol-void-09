@@ -101,23 +101,20 @@ export class HudCanvas {
       return;
     }
 
-    const imgW = this.img.naturalWidth || this.img.width;
-    const imgH = this.img.naturalHeight || this.img.height;
-
     const normX = Math.abs(this.gazeX) <= 1 && Math.abs(this.gazeY) <= 1 ? this.gazeX : (this.gazeX - 0.5) * 2;
     const normY = Math.abs(this.gazeY) <= 1 && Math.abs(this.gazeY) <= 1 ? this.gazeY : (this.gazeY - 0.5) * 2;
-    const offsetX = Math.max(-16, Math.min(16, normX * 12));
-    const offsetY = Math.max(-12, Math.min(12, normY * 9));
+    const offsetX = Math.max(-10, Math.min(10, normX * 8));
+    const offsetY = Math.max(-8, Math.min(8, normY * 6));
 
-    const padding = 8;
+    const padding = 4;
     const availW = Math.max(1, width - padding * 2);
     const availH = Math.max(1, height - padding * 2);
-    const scale = Math.min(availW / imgW, availH / imgH) * 1.28;
-    const drawW = imgW * scale;
-    const drawH = imgH * scale;
 
-    const x = (width - drawW) / 2 + offsetX;
-    const y = padding + offsetY;
+    // Poora box left-to-right aur top-to-bottom fill karne ke liye stretch
+    const drawW = availW;
+    const drawH = availH;
+    const x = padding + offsetX * 0.35;
+    const y = padding + offsetY * 0.35;
 
     ctx.save();
     ctx.beginPath();
@@ -126,11 +123,11 @@ export class HudCanvas {
 
     ctx.drawImage(this.img, x, y, drawW, drawH);
 
-    // Sirf aankhon ki line par blink shutter (head/forehead par nahi)
+    // Sirf aankhon ke hisse par blink shutter
     if (this.blinkProgress > 0) {
       const factor = this.blinkProgress <= 1 ? this.blinkProgress : 2 - this.blinkProgress;
-      const eyeBandW = drawW * 0.24;
-      const eyeBandH = drawH * 0.045 * Math.min(1, factor);
+      const eyeBandW = drawW * 0.14;
+      const eyeBandH = drawH * 0.05 * Math.min(1, factor);
       const eyeCenterX = x + drawW * 0.5;
       const eyeCenterY = y + drawH * 0.36;
 
