@@ -29,7 +29,7 @@ export class HudCanvas {
     this.evolutionPower = 148;
     this.upgradeLog = "UPGRADE #15 // OVERDRIVE CORE BOOST (+5 LVL) // PWR:148";
 
-    // Required user-configurable node links & optional keys: Ollama, OpenClaw, Mythos
+    // Required user-configurable node links & required API keys: Ollama, OpenClaw, Mythos
     this.requiredNodes = ["ollama", "openclaw", "mythos"];
     this.nodes = {
       ollama: {
@@ -41,9 +41,10 @@ export class HudCanvas {
         ],
         apiKey: "",
         required: true,
+        keyRequired: true,
         autoDetected: false,
         model: "llama3.2",
-        status: "REQUIRED"
+        status: "KEY_REQUIRED"
       },
       openclaw: {
         label: "OPENCLAW",
@@ -57,9 +58,10 @@ export class HudCanvas {
         ],
         apiKey: "",
         required: true,
+        keyRequired: true,
         autoDetected: false,
         mode: "CLI_OR_APP",
-        status: "REQUIRED"
+        status: "KEY_REQUIRED"
       },
       mythos: {
         label: "MYTHOS",
@@ -71,14 +73,15 @@ export class HudCanvas {
         ],
         apiKey: "",
         required: true,
+        keyRequired: true,
         autoDetected: false,
         core: "MYTHOS_ENGINE",
-        status: "REQUIRED"
+        status: "KEY_REQUIRED"
       }
     };
     this._drawerInputs = null;
     this.activeNode = "OLLAMA+OPENCLAW+MYTHOS";
-    this.bridgeStatus = "AUTO-DETECT READY // OLLAMA + OPENCLAW + MYTHOS";
+    this.bridgeStatus = "API KEY REQUIRED FOR ALL 3: OLLAMA + OPENCLAW + MYTHOS";
 
     // Error spark state (only on real errors)
     this.sparks = [];
@@ -111,17 +114,56 @@ export class HudCanvas {
   _syncInputsFromNodes() {
     if (!this._drawerInputs) return;
     this.requiredNodes.forEach((key) => {
-      if (this._drawerInputs[key] && this._drawerInputs[key].urlInput) {
-        this._drawerInputs[key].urlInput.value = this.nodes[key].url || "";
+      if (this._drawerInputs[key]) {
+        if (this._drawerInputs[key].urlInput) {
+          this._drawerInputs[key].urlInput.value = this.nodes[key].url || "";
+        }
+        if (this._drawerInputs[key].keyInput && this.nodes[key].apiKey) {
+          this._drawerInputs[key].keyInput.value = this.nodes[key].apiKey;
+        }
       }
     });
   }
 
-  async _probeUrl(url, apiKey = "", timeoutMs = 1300) {
-    const headers = {};
-    if (apiKey && String(apiKey).trim()) {
-      headers.Authorization = `Bearer ${String(apiKey).trim()}`;
+  getMissingRequiredNodes() {
+    return this.requiredNodes.filter((key) => {
+      const node = this.nodes[key];
+      const hasUrl = node && node.url && String(node.url).trim().length > 0;
+      const hasKey = node && node.apiKey && String(node.apiKey).trim().length > 0;
+      return !hasUrl || !hasKey;
+    });
+  }
+
+  getMissingKeysOnly() {
+    return this.requiredNodes.filter((key) => {
+      const node = this.nodes[key];
+      return !node || !node.apiKey || !String(node.apiKey).trim();
+    });
+  }
+
+  validateRequiredNodes() {
+    const missing = this.getMissingRequiredNodes();
+    this.requiredNodes.forEach((key) => {
+      const node = this.nodes[key];
+      const hasUrl = node.url && String(node.url).trim().length > 0;
+      const hasKey = node.apiKey && String(node.apiKey).trim().length > 0;
+      if (!hasUrl) node.status = "LINK_REQUIRED";
+      else if (!hasKey) node.status = "KEY_REQUIRED";
+    });
+    if (missing.length > 0) {
+      const labels = missing.map((k) => this.nodes[k].label).join(" + ");
+      this.bridgeStatus = `LINK + API KEY REQUIRED: ${labels}`;
+      this.triggerSpark("API_KEY_REQUIRED", 1.2);
+      return false;
     }
+    return true;
+  }
+
+  async _probeUrl(url, apiKey = "", timeoutMs = 1300) {
+    const headers = {
+      Authorization: `Bearer ${String(apiKey).trim()}`,
+      "X-API-Key": String(apiKey).trim()
+    };
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -140,7 +182,7 @@ export class HudCanvas {
   }
 
   async autoDetectAndAddNodes(silentSpark = true) {
-    this.bridgeStatus = "AUTO-DETECTING LOCAL / RUNNING NODES...";
+    this.bridgeStatus = "AUTO-DETECTING LINKS (API KEYS STILL REQUIRED)...";
     const found = [];
 
     for (const key of this.requiredNodes) {
@@ -149,7 +191,7 @@ export class HudCanvas {
       let matchedUrl = null;
 
       for (const candidate of list) {
-        const ok = await this._probeUrl(candidate, node.apiKey, 1200);
+        const ok = await this._probeUrl(candidate, node.apiKey || "PENDING_KEY", 1200);
         if (ok) {
           matchedUrl = candidate;
           break;
@@ -159,50 +201,24 @@ export class HudCanvas {
       if (matchedUrl) {
         node.url = matchedUrl;
         node.autoDetected = true;
-        node.status = "AUTO_LINKED";
         found.push(node.label);
-      } else if (!node.url || !String(node.url).trim()) {
-        node.status = "MISSING_REQUIRED";
-      } else {
-        node.status = "NOT_DETECTED";
+      }
+      if (!node.apiKey || !String(node.apiKey).trim()) {
+        node.status = "KEY_REQUIRED";
       }
     }
 
     this._syncInputsFromNodes();
 
     if (found.length > 0) {
-      this.bridgeStatus = `AUTO-ADDED: ${found.join(" + ")}`;
+      this.bridgeStatus = `LINK FOUND: ${found.join(" + ")} // ENTER ALL 3 API KEYS`;
     } else {
-      this.bridgeStatus = "NO RUNNING NODE AUTO-DETECTED // CHECK CORS OR ADD LINK";
+      this.bridgeStatus = "ENTER LINK + API KEY FOR OLLAMA, OPENCLAW & MYTHOS";
       if (!silentSpark) {
         this.triggerSpark("AUTO_DETECT_NONE", 1.0);
       }
     }
     return found;
-  }
-
-  getMissingRequiredNodes() {
-    return this.requiredNodes.filter((key) => {
-      const node = this.nodes[key];
-      return !node || !node.url || !String(node.url).trim();
-    });
-  }
-
-  validateRequiredNodes() {
-    const missing = this.getMissingRequiredNodes();
-    this.requiredNodes.forEach((key) => {
-      const node = this.nodes[key];
-      if (!node.url || !String(node.url).trim()) {
-        node.status = "MISSING_REQUIRED";
-      }
-    });
-    if (missing.length > 0) {
-      const labels = missing.map((k) => this.nodes[k].label).join(" + ");
-      this.bridgeStatus = `REQUIRED MISSING: ${labels}`;
-      this.triggerSpark("REQUIRED_NODE_MISSING", 1.15);
-      return false;
-    }
-    return true;
   }
 
   configureNode(nodeKey, patch = {}) {
@@ -218,15 +234,21 @@ export class HudCanvas {
     const node = this.nodes[key];
     if (!node) return false;
     if (!node.url || !String(node.url).trim()) {
-      node.status = "MISSING_REQUIRED";
-      this.bridgeStatus = `${node.label} LINK IS REQUIRED`;
-      this.triggerSpark(`${node.label}_REQUIRED`, 1.1);
+      node.status = "LINK_REQUIRED";
+      this.bridgeStatus = `${node.label} LINK REQUIRED`;
+      this.triggerSpark(`${node.label}_LINK_REQUIRED`, 1.1);
+      return false;
+    }
+    if (!node.apiKey || !String(node.apiKey).trim()) {
+      node.status = "KEY_REQUIRED";
+      this.bridgeStatus = `${node.label} API KEY REQUIRED`;
+      this.triggerSpark(`${node.label}_KEY_REQUIRED`, 1.15);
       return false;
     }
 
     this.activeNode = node.label;
     node.status = "PROBING";
-    this.bridgeStatus = `PROBING ${node.label} [REQUIRED]...`;
+    this.bridgeStatus = `PROBING ${node.label} WITH API KEY...`;
 
     const ok = await this._probeUrl(node.url, node.apiKey, 1800);
     if (ok) {
@@ -236,7 +258,7 @@ export class HudCanvas {
     }
 
     node.status = "OFFLINE/LOCAL";
-    this.bridgeStatus = `${node.label} UNREACHABLE (CHECK LOCAL LINK)`;
+    this.bridgeStatus = `${node.label} UNREACHABLE (CHECK LINK / CORS)`;
     this.triggerSpark(`${node.label}_LINK_FAULT`, 1.1);
     return false;
   }
@@ -245,7 +267,7 @@ export class HudCanvas {
     if (!this.validateRequiredNodes()) {
       return false;
     }
-    this.bridgeStatus = "SYNCING REQUIRED: OLLAMA + OPENCLAW + MYTHOS...";
+    this.bridgeStatus = "SYNCING ALL 3 NODES WITH API KEYS...";
     await Promise.all([
       this.pingNode("ollama"),
       this.pingNode("openclaw"),
@@ -397,7 +419,7 @@ export class HudCanvas {
     ].join(";");
 
     const reqBanner = document.createElement("div");
-    reqBanner.textContent = "REQUIRED: OLLAMA + OPENCLAW + MYTHOS (CLI OR APP)";
+    reqBanner.textContent = "LINK + API KEY REQUIRED: OLLAMA + OPENCLAW + MYTHOS";
     reqBanner.style.cssText = "color:#fca5a5;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid rgba(248,113,113,0.25);";
     drawer.appendChild(reqBanner);
 
@@ -410,7 +432,7 @@ export class HudCanvas {
       row.style.cssText = "margin-bottom:6px;";
 
       const title = document.createElement("div");
-      title.innerHTML = `<span style="color:#fde047;">${this.nodes[key].label}</span> <span style="color:#f87171;">* REQUIRED</span>`;
+      title.innerHTML = `<span style="color:#fde047;">${this.nodes[key].label}</span> <span style="color:#f87171;">* LINK + API KEY REQUIRED</span>`;
       title.style.cssText = "margin-bottom:2px;";
 
       const urlInput = document.createElement("input");
@@ -422,9 +444,10 @@ export class HudCanvas {
 
       const keyInput = document.createElement("input");
       keyInput.type = "password";
-      keyInput.placeholder = "Optional API Key (user own)";
+      keyInput.required = true;
+      keyInput.placeholder = `${this.nodes[key].label} API KEY (REQUIRED)`;
       keyInput.autocomplete = "off";
-      keyInput.style.cssText = "width:100%;box-sizing:border-box;background:#05070d;color:#fff;border:1px solid rgba(248,113,113,0.3);padding:3px 5px;font-size:10px;";
+      keyInput.style.cssText = "width:100%;box-sizing:border-box;background:#05070d;color:#fff;border:1px solid rgba(253,224,71,0.55);padding:3px 5px;font-size:10px;";
 
       inputs[key] = { urlInput, keyInput };
       row.appendChild(title);
@@ -436,7 +459,7 @@ export class HudCanvas {
 
     const detectBtn = document.createElement("button");
     detectBtn.type = "button";
-    detectBtn.textContent = "AUTO-DETECT & ADD RUNNING NODES";
+    detectBtn.textContent = "AUTO-DETECT LINKS (ADD API KEYS BELOW)";
     detectBtn.style.cssText = "width:100%;background:rgba(15,23,42,0.95);color:#fde047;border:1px solid rgba(253,224,71,0.6);padding:4px 6px;margin-bottom:5px;cursor:pointer;";
     detectBtn.addEventListener("click", () => {
       reqErrorEl.style.display = "none";
@@ -454,13 +477,13 @@ export class HudCanvas {
       this.requiredNodes.forEach((key) => {
         this.configureNode(key, {
           url: inputs[key].urlInput.value.trim(),
-          apiKey: inputs[key].keyInput.value
+          apiKey: inputs[key].keyInput.value.trim()
         });
       });
       const missing = this.getMissingRequiredNodes();
       if (missing.length > 0) {
         const names = missing.map((k) => this.nodes[k].label).join(", ");
-        reqErrorEl.textContent = `REQUIRED LINK MISSING: ${names}`;
+        reqErrorEl.textContent = `REQUIRED LINK/API KEY MISSING: ${names}`;
         reqErrorEl.style.display = "block";
         this.validateRequiredNodes();
         return;
@@ -473,7 +496,7 @@ export class HudCanvas {
 
     const linksToggleBtn = document.createElement("button");
     linksToggleBtn.type = "button";
-    linksToggleBtn.textContent = "LINKS*";
+    linksToggleBtn.textContent = "LINKS & KEYS*";
     linksToggleBtn.style.cssText = [
       "background:rgba(15,23,42,0.92)",
       "color:#fde047",
@@ -518,7 +541,7 @@ export class HudCanvas {
       if (!this.validateRequiredNodes()) {
         drawer.style.display = "block";
         const missing = this.getMissingRequiredNodes().map((k) => this.nodes[k].label).join(", ");
-        reqErrorEl.textContent = `REQUIRED LINK MISSING: ${missing}`;
+        reqErrorEl.textContent = `REQUIRED LINK/API KEY MISSING: ${missing}`;
         reqErrorEl.style.display = "block";
         return;
       }
