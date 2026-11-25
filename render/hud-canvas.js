@@ -29,23 +29,26 @@ export class HudCanvas {
     this.evolutionPower = 148;
     this.upgradeLog = "UPGRADE #15 // OVERDRIVE CORE BOOST (+5 LVL) // PWR:148";
 
-    // External node links: Ollama, OpenClaw, Mythos
+    // User-configurable node links & keys: Ollama, OpenClaw, Mythos
     this.nodes = {
       ollama: {
         label: "OLLAMA",
         url: "http://127.0.0.1:11434/api/tags",
+        apiKey: "",
         model: "llama3.2",
         status: "STANDBY"
       },
       openclaw: {
         label: "OPENCLAW",
         url: "http://127.0.0.1:8787/health",
+        apiKey: "",
         mode: "AGENT_LINK",
         status: "STANDBY"
       },
       mythos: {
         label: "MYTHOS",
         url: "http://127.0.0.1:9000/status",
+        apiKey: "",
         core: "MYTHOS_ENGINE",
         status: "STANDBY"
       }
@@ -92,14 +95,30 @@ export class HudCanvas {
     const key = String(nodeKey || "").toLowerCase();
     const node = this.nodes[key];
     if (!node) return false;
+    if (!node.url || !String(node.url).trim()) {
+      node.status = "NO_LINK";
+      this.bridgeStatus = `${node.label} LINK MISSING`;
+      return false;
+    }
+
     this.activeNode = node.label;
     node.status = "PROBING";
     this.bridgeStatus = `PROBING ${node.label}...`;
 
+    const headers = {};
+    if (node.apiKey && String(node.apiKey).trim()) {
+      headers.Authorization = `Bearer ${String(node.apiKey).trim()}`;
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 1800);
     try {
-      await fetch(node.url, { method: "GET", mode: "no-cors", signal: controller.signal });
+      await fetch(String(node.url).trim(), {
+        method: "GET",
+        mode: "no-cors",
+        headers,
+        signal: controller.signal
+      });
       clearTimeout(timer);
       node.status = "LINKED";
       this.bridgeStatus = `${node.label} LINKED // READY`;
@@ -107,7 +126,7 @@ export class HudCanvas {
     } catch {
       clearTimeout(timer);
       node.status = "OFFLINE/LOCAL";
-      this.bridgeStatus = `${node.label} UNREACHABLE (CHECK LOCAL SERVICE)`;
+      this.bridgeStatus = `${node.label} UNREACHABLE (CHECK LOCAL LINK)`;
       this.triggerSpark(`${node.label}_LINK_FAULT`, 1.1);
       return false;
     }
@@ -200,7 +219,7 @@ export class HudCanvas {
 
   _createScannerControls() {
     if (!this.canvas || !this.canvas.parentElement) return;
-    const old = document.querySelectorAll(".void09-scanner-bar");
+    const old = document.querySelectorAll(".void09-scanner-bar, .void09-node-drawer");
     old.forEach((el) => el.remove());
 
     const parent = this.canvas.parentElement;
@@ -247,6 +266,82 @@ export class HudCanvas {
       }
     });
 
+    const drawer = document.createElement("div");
+    drawer.className = "void09-node-drawer";
+    drawer.style.cssText = [
+      "display:none",
+      "position:absolute",
+      "top:42px",
+      "right:14px",
+      "z-index:25",
+      "width:280px",
+      "background:rgba(8,11,20,0.96)",
+      "border:1px solid rgba(248,113,113,0.65)",
+      "padding:8px",
+      "font-family:monospace",
+      "font-size:10px",
+      "color:#fecaca"
+    ].join(";");
+
+    const inputs = {};
+    ["ollama", "openclaw", "mythos"].forEach((key) => {
+      const row = document.createElement("div");
+      row.style.cssText = "margin-bottom:6px;";
+
+      const title = document.createElement("div");
+      title.textContent = `${this.nodes[key].label} LINK`;
+      title.style.cssText = "color:#fde047;margin-bottom:2px;";
+
+      const urlInput = document.createElement("input");
+      urlInput.type = "text";
+      urlInput.placeholder = `${this.nodes[key].label} URL`;
+      urlInput.value = this.nodes[key].url;
+      urlInput.style.cssText = "width:100%;box-sizing:border-box;background:#05070d;color:#fff;border:1px solid rgba(248,113,113,0.4);padding:3px 5px;margin-bottom:2px;font-size:10px;";
+
+      const keyInput = document.createElement("input");
+      keyInput.type = "password";
+      keyInput.placeholder = "Optional API Key (user own)";
+      keyInput.autocomplete = "off";
+      keyInput.style.cssText = "width:100%;box-sizing:border-box;background:#05070d;color:#fff;border:1px solid rgba(248,113,113,0.3);padding:3px 5px;font-size:10px;";
+
+      inputs[key] = { urlInput, keyInput };
+      row.appendChild(title);
+      row.appendChild(urlInput);
+      row.appendChild(keyInput);
+      drawer.appendChild(row);
+    });
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.textContent = "APPLY & SYNC LINKS";
+    saveBtn.style.cssText = "width:100%;background:rgba(185,28,28,0.92);color:#fff;border:1px solid rgba(254,202,202,0.7);padding:4px 6px;cursor:pointer;";
+    saveBtn.addEventListener("click", () => {
+      ["ollama", "openclaw", "mythos"].forEach((key) => {
+        this.configureNode(key, {
+          url: inputs[key].urlInput.value.trim(),
+          apiKey: inputs[key].keyInput.value
+        });
+      });
+      this.syncAllNodes();
+      drawer.style.display = "none";
+    });
+    drawer.appendChild(saveBtn);
+
+    const linksToggleBtn = document.createElement("button");
+    linksToggleBtn.type = "button";
+    linksToggleBtn.textContent = "LINKS / KEYS";
+    linksToggleBtn.style.cssText = [
+      "background:rgba(15,23,42,0.92)",
+      "color:#fde047",
+      "border:1px solid rgba(253,224,71,0.55)",
+      "padding:4px 7px",
+      "cursor:pointer",
+      "text-transform:uppercase"
+    ].join(";");
+    linksToggleBtn.addEventListener("click", () => {
+      drawer.style.display = drawer.style.display === "none" ? "block" : "none";
+    });
+
     const makeLinkBtn = (label, key) => {
       const b = document.createElement("button");
       b.type = "button";
@@ -277,11 +372,13 @@ export class HudCanvas {
     syncBtn.addEventListener("click", () => this.syncAllNodes());
 
     bar.appendChild(btn);
+    bar.appendChild(linksToggleBtn);
     bar.appendChild(makeLinkBtn("OLLAMA", "ollama"));
     bar.appendChild(makeLinkBtn("OPENCLAW", "openclaw"));
     bar.appendChild(makeLinkBtn("MYTHOS", "mythos"));
     bar.appendChild(syncBtn);
     parent.appendChild(bar);
+    parent.appendChild(drawer);
   }
 
   async startScanner() {
