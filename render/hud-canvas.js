@@ -36,10 +36,12 @@ export class HudCanvas {
     this.animalPerceptionCount = 10000;
     this.upgradeLog = `UPGRADE #1 // 20K HUMAN + 10K ANIMAL MATRIX // ${this._formatPower(this.evolutionPower)}`;
 
-    // Robot Voice state
+    // Robot Voice & Reply state
     this.voiceEnabled = true;
     this.voiceSpeaking = false;
     this.lastSpokenText = "";
+    this.lastReply = "VOID-09 ONLINE. Say hello or type a command and click EXECUTE.";
+    this._replyBox = null;
 
     // Ollama runs locally without API key; OpenClaw, Mythos & Grok each take a single user key
     this.requiredNodes = ["ollama", "openclaw", "mythos", "grok"];
@@ -158,7 +160,7 @@ export class HudCanvas {
     this.bridgeStatus = `${this._formatPower(this.evolutionPower)} // 20K HUMANS + 10K ANIMALS // STEP #${this.upgradeStep}`;
     this.triggerSpark(reason, 1.35);
     if (announce) {
-      this.speak(`Upgrade ${this.upgradeStep}. Twenty thousand human minds and ten thousand animal instincts online. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
+      this.speak(`Upgrade ${this.upgradeStep}. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
     }
     return this.evolutionPower;
   }
@@ -171,7 +173,61 @@ export class HudCanvas {
     return this.doubleAndUpgrade("OVERDRIVE_2X_BOOST", true);
   }
 
-  speak(text, { pitch = 0.88, rate = 1.05, force = false } = {}) {
+  setReply(text, speakIt = true) {
+    const clean = String(text || "").trim();
+    if (!clean) return;
+    this.lastReply = clean;
+    if (this._replyBox) {
+      this._replyBox.textContent = `VOID-09 REPLY: ${clean}`;
+    }
+    if (speakIt) {
+      this.speak(clean);
+    }
+  }
+
+  async _generateReply(promptText) {
+    const q = String(promptText || "").trim();
+    const low = q.toLowerCase();
+
+    // Try live Ollama local generate if available
+    const ollamaUrl = String(this.nodes.ollama?.url || "").trim();
+    if (ollamaUrl) {
+      const base = ollamaUrl.replace(/\/api\/tags.*$/i, "");
+      try {
+        const res = await fetch(`${base}/api/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: this.nodes.ollama?.model || "llama3.2",
+            prompt: q || "Hello",
+            stream: false
+          }),
+          signal: AbortSignal.timeout(2500)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.response) {
+            return String(data.response).trim();
+          }
+        }
+      } catch {
+        // Fallback to instant HUD reply
+      }
+    }
+
+    if (!q || /^(hi|hello|hey|namaste|नमस्ते|हेलो|हाय)$/i.test(low)) {
+      return `Hello! VOID-09 is online at ${this._formatPower(this.evolutionPower)}. How can I help you?`;
+    }
+    if (/power|hp|horse/i.test(low)) {
+      return `Current power is ${this._formatPower(this.evolutionPower)} at step ${this.upgradeStep}.`;
+    }
+    if (/who|kaun|naam|name/i.test(low)) {
+      return "I am VOID-09, your HUD interface with voice and node controls.";
+    }
+    return `Received "${q}". VOID-09 is active at ${this._formatPower(this.evolutionPower)}.`;
+  }
+
+  speak(text, { pitch = 0.92, rate = 1.04, force = false } = {}) {
     const clean = String(text || "").trim();
     if (!clean) return false;
     this.lastSpokenText = clean;
@@ -214,16 +270,13 @@ export class HudCanvas {
       const execBtn = buttons.find((b) => /execute/i.test((b.textContent || "").trim()));
       if (!execBtn || execBtn.dataset.voidVoiceBound) return;
       execBtn.dataset.voidVoiceBound = "1";
-      execBtn.addEventListener("click", () => {
+      execBtn.addEventListener("click", async () => {
         const inputs = Array.from(document.querySelectorAll("input[type='text'], textarea"));
-        const cmdInput = inputs.find((el) => !el.closest(".void09-node-drawer") && String(el.value || "").trim().length > 0);
-        const query = cmdInput ? String(cmdInput.value).trim() : "";
+        const cmdInput = inputs.find((el) => !el.closest(".void09-node-drawer"));
+        const query = cmdInput ? String(cmdInput.value || "").trim() : "";
         this.doubleAndUpgrade("EXECUTE_2X_SURGE", false);
-        if (query) {
-          this.speak(`Executing with twenty thousand human minds, action force, and ten thousand animal instincts. ${query.slice(0, 75)}`);
-        } else {
-          this.speak(`VOID-09 surge active. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
-        }
+        const reply = await this._generateReply(query);
+        this.setReply(reply, true);
       });
     };
     setTimeout(attach, 300);
@@ -267,7 +320,7 @@ export class HudCanvas {
       const labels = missing.map((k) => this.nodes[k].label).join(" + ");
       this.bridgeStatus = `MISSING REQUIRED: ${labels} // ${this._formatPower(this.evolutionPower)}`;
       this.triggerSpark("REQUIRED_NODE_MISSING", 1.2);
-      this.speak(`Missing required configuration for ${labels}.`);
+      this.setReply(`Missing required configuration for ${labels}.`);
       return false;
     }
     return true;
@@ -330,13 +383,13 @@ export class HudCanvas {
     if (found.length > 0) {
       this.bridgeStatus = `DETECTED: ${found.join(" + ")} // ${this._formatPower(this.evolutionPower)}`;
       if (!silentSpark) {
-        this.speak(`Detected ${found.join(" and ")}.`);
+        this.setReply(`Detected ${found.join(" and ")}.`);
       }
     } else {
       this.bridgeStatus = `100% // ${this._formatPower(this.evolutionPower)} // 20K HUMANS + 10K ANIMALS`;
       if (!silentSpark) {
         this.triggerSpark("AUTO_DETECT_NONE", 1.0);
-        this.speak("Scan complete. Enter required API keys for OpenClaw, Mythos, and Grok.");
+        this.setReply("Scan complete. Enter required API keys for OpenClaw, Mythos, and Grok.");
       }
     }
     return found;
@@ -358,14 +411,14 @@ export class HudCanvas {
       node.status = "LINK_REQUIRED";
       this.bridgeStatus = `${node.label} LINK REQUIRED // ${this._formatPower(this.evolutionPower)}`;
       this.triggerSpark(`${node.label}_LINK_REQUIRED`, 1.1);
-      this.speak(`${node.label} link required.`);
+      this.setReply(`${node.label} link required.`);
       return false;
     }
     if (node.keyRequired && (!node.apiKey || !String(node.apiKey).trim())) {
       node.status = "KEY_REQUIRED";
       this.bridgeStatus = `${node.label} API KEY REQUIRED // ${this._formatPower(this.evolutionPower)}`;
       this.triggerSpark(`${node.label}_KEY_REQUIRED`, 1.15);
-      this.speak(`${node.label} API key required.`);
+      this.setReply(`${node.label} API key required.`);
       return false;
     }
 
@@ -378,14 +431,14 @@ export class HudCanvas {
       node.status = "LINKED";
       this.doubleAndUpgrade(`${node.label}_LINKED_2X`, false);
       this.bridgeStatus = `${node.label} LINKED // ${this._formatPower(this.evolutionPower)}`;
-      this.speak(`${node.label} linked. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
+      this.setReply(`${node.label} linked. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
       return true;
     }
 
     node.status = node.keyRequired ? "OFFLINE/LOCAL" : "LOCAL_RUN";
     this.bridgeStatus = `${node.label} UNREACHABLE // ${this._formatPower(this.evolutionPower)}`;
     this.triggerSpark(`${node.label}_LINK_FAULT`, 1.1);
-    this.speak(`${node.label} unreachable. Check link or key.`);
+    this.setReply(`${node.label} unreachable. Check link or key.`);
     return false;
   }
 
@@ -403,7 +456,7 @@ export class HudCanvas {
     this.doubleAndUpgrade("ALL_NODES_SYNC_2X", false);
     this.activeNode = "OLLAMA+OPENCLAW+MYTHOS+GROK";
     this.bridgeStatus = `${this._formatPower(this.evolutionPower)} | OL:${this.nodes.ollama.status} | OC:${this.nodes.openclaw.status} | MY:${this.nodes.mythos.status} | GK:${this.nodes.grok.status}`;
-    this.speak(`All nodes synchronized. Power at ${this._formatPower(this.evolutionPower)}.`);
+    this.setReply(`All nodes synchronized. Power at ${this._formatPower(this.evolutionPower)}.`);
     return true;
   }
 
@@ -483,7 +536,7 @@ export class HudCanvas {
 
   _createScannerControls() {
     if (!this.canvas || !this.canvas.parentElement) return;
-    const old = document.querySelectorAll(".void09-scanner-bar, .void09-node-drawer");
+    const old = document.querySelectorAll(".void09-scanner-bar, .void09-node-drawer, .void09-reply-bar");
     old.forEach((el) => el.remove());
 
     const parent = this.canvas.parentElement;
@@ -523,11 +576,11 @@ export class HudCanvas {
       if (this.scannerActive) {
         this.stopScanner();
         btn.textContent = "SCAN FACE & EYES";
-        this.speak("Scanner stopped.");
+        this.setReply("Scanner stopped.");
       } else {
         this.startScanner().then((ok) => {
           btn.textContent = ok ? "STOP SCAN" : "SCAN FACE & EYES";
-          if (ok) this.speak("Optic scanner online. Tracking face and eyes.");
+          if (ok) this.setReply("Optic scanner online. Tracking face and eyes.");
         });
       }
     });
@@ -712,6 +765,20 @@ export class HudCanvas {
       this.syncAllNodes();
     });
 
+    const replyBar = document.createElement("div");
+    replyBar.className = "void09-reply-bar";
+    replyBar.style.cssText = [
+      "margin-top:6px",
+      "padding:6px 8px",
+      "background:rgba(10,14,24,0.96)",
+      "border:1px solid rgba(253,224,71,0.5)",
+      "color:#fde047",
+      "font-family:monospace",
+      "font-size:11px"
+    ].join(";");
+    replyBar.textContent = `VOID-09 REPLY: ${this.lastReply}`;
+    this._replyBox = replyBar;
+
     bar.appendChild(btn);
     bar.appendChild(voiceBtn);
     bar.appendChild(linksToggleBtn);
@@ -722,6 +789,7 @@ export class HudCanvas {
     bar.appendChild(syncBtn);
     parent.appendChild(bar);
     parent.appendChild(drawer);
+    parent.insertAdjacentElement("afterend", replyBar);
   }
 
   async startScanner() {
