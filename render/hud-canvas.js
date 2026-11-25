@@ -30,6 +30,13 @@ export class HudCanvas {
     this.upgradeStep = 1;
     this.evolutionPower = this.baseHorsepower;
 
+    // Load & Red Siren / Danger Overload state
+    this.loadPercent = 28;
+    this.dangerMode = false;
+    this._audioCtx = null;
+    this._sirenTimer = null;
+    this._sirenBtn = null;
+
     // Collective cognition & instinct scale: 20,000 humans (mind + action) & 10,000 animals (perception)
     this.humanCognitionCount = 20000;
     this.humanActionPower = 20000;
@@ -108,7 +115,7 @@ export class HudCanvas {
     };
     this._drawerInputs = null;
     this.activeNode = "OLLAMA+OPENCLAW+MYTHOS+GROK";
-    this.bridgeStatus = `${this._formatPower(this.evolutionPower)} // 20K HUMANS + 10K ANIMALS // 2X LOOP`;
+    this.bridgeStatus = `${this._formatPower(this.evolutionPower)} // LOAD:${this.loadPercent}% // 2X LOOP`;
 
     // Error spark state (only on real errors)
     this.sparks = [];
@@ -147,6 +154,99 @@ export class HudCanvas {
     return `${num.toLocaleString("en-US")} HP`;
   }
 
+  startSiren() {
+    if (typeof window === "undefined") return;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+
+    try {
+      if (!this._audioCtx) {
+        this._audioCtx = new AudioCtx();
+      }
+      if (this._audioCtx.state === "suspended") {
+        this._audioCtx.resume();
+      }
+      if (this._sirenTimer) return;
+
+      let highTone = true;
+      const playPulse = () => {
+        if (!this.dangerMode || !this._audioCtx) return;
+        const now = this._audioCtx.currentTime;
+        const osc = this._audioCtx.createOscillator();
+        const gain = this._audioCtx.createGain();
+        osc.type = "sawtooth";
+        const f1 = highTone ? 880 : 520;
+        const f2 = highTone ? 520 : 880;
+        highTone = !highTone;
+
+        osc.frequency.setValueAtTime(f1, now);
+        osc.frequency.linearRampToValueAtTime(f2, now + 0.36);
+
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.exponentialRampToValueAtTime(0.14, now + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+
+        osc.connect(gain);
+        gain.connect(this._audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.4);
+      };
+
+      playPulse();
+      this._sirenTimer = setInterval(playPulse, 420);
+      this._updateSirenButton();
+    } catch {
+      // Ignore audio errors if autoplay is blocked
+    }
+  }
+
+  stopSiren() {
+    if (this._sirenTimer) {
+      clearInterval(this._sirenTimer);
+      this._sirenTimer = null;
+    }
+    this._updateSirenButton();
+  }
+
+  _updateSirenButton() {
+    if (!this._sirenBtn) return;
+    if (this.dangerMode) {
+      this._sirenBtn.textContent = "SIREN: DANGER (STOP)";
+      this._sirenBtn.style.background = "rgba(220,38,38,0.98)";
+      this._sirenBtn.style.color = "#fef08a";
+    } else {
+      this._sirenBtn.textContent = "TEST RED SIREN";
+      this._sirenBtn.style.background = "rgba(15,23,42,0.92)";
+      this._sirenBtn.style.color = "#fca5a5";
+    }
+  }
+
+  triggerDangerOverload(reason = "HEAVY_LOAD_OVERFLOW") {
+    this.dangerMode = true;
+    this.loadPercent = Math.max(100, this.loadPercent);
+    this.state = "DANGER_OVERLOAD";
+    this.triggerSpark(reason, 1.5);
+    this.startSiren();
+    this.setReply(`DANGER! Heavy load reached ${this.loadPercent}%. Red siren active.`);
+  }
+
+  resetDangerLoad() {
+    this.dangerMode = false;
+    this.loadPercent = 25;
+    this.state = "APEX_LOCK";
+    this.stopSiren();
+    this.setReply("Overload cleared. Red siren stopped and system stabilized.");
+  }
+
+  addLoad(amount = 25, reason = "LOAD_SPIKE") {
+    this.loadPercent = Math.min(200, Math.max(0, this.loadPercent + Number(amount || 0)));
+    if (this.loadPercent >= 100 && !this.dangerMode) {
+      this.triggerDangerOverload(reason);
+    } else if (this.dangerMode) {
+      this.triggerSpark(reason, 1.45);
+    }
+  }
+
   doubleAndUpgrade(reason = "2X_SELF_UPGRADE", announce = false) {
     this.readinessPercent = 100;
     this.upgradeStep += 1;
@@ -156,11 +256,12 @@ export class HudCanvas {
     this.humanCognitionCount = Math.min(20000000, this.humanCognitionCount * 2);
     this.humanActionPower = Math.min(20000000, this.humanActionPower * 2);
     this.animalPerceptionCount = Math.min(10000000, this.animalPerceptionCount * 2);
-    this.upgradeLog = `UPGRADE #${this.upgradeStep} // 20K+10K 2X // ${this._formatPower(this.evolutionPower)}`;
-    this.bridgeStatus = `${this._formatPower(this.evolutionPower)} // 20K HUMANS + 10K ANIMALS // STEP #${this.upgradeStep}`;
-    this.triggerSpark(reason, 1.35);
+    this.addLoad(14, reason);
+    this.upgradeLog = `UPGRADE #${this.upgradeStep} // LOAD:${this.loadPercent}% // ${this._formatPower(this.evolutionPower)}`;
+    this.bridgeStatus = `${this._formatPower(this.evolutionPower)} // LOAD:${this.loadPercent}% // ${this.dangerMode ? "RED SIREN" : "2X LOOP"}`;
+    this.triggerSpark(reason, this.dangerMode ? 1.5 : 1.35);
     if (announce) {
-      this.speak(`Upgrade ${this.upgradeStep}. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
+      this.speak(`Upgrade ${this.upgradeStep}. Load ${this.loadPercent} percent. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
     }
     return this.evolutionPower;
   }
@@ -170,6 +271,7 @@ export class HudCanvas {
     if ((Number(this.evolutionPower) || 0) < floorVal) {
       this.evolutionPower = floorVal;
     }
+    this.addLoad(45, "HEAVY_BOOST_OVERLOAD");
     return this.doubleAndUpgrade("OVERDRIVE_2X_BOOST", true);
   }
 
@@ -179,6 +281,8 @@ export class HudCanvas {
     this.lastReply = clean;
     if (this._replyBox) {
       this._replyBox.textContent = `VOID-09 REPLY: ${clean}`;
+      this._replyBox.style.borderColor = this.dangerMode ? "rgba(239,68,68,0.95)" : "rgba(253,224,71,0.5)";
+      this._replyBox.style.color = this.dangerMode ? "#fca5a5" : "#fde047";
     }
     if (speakIt) {
       this.speak(clean);
@@ -189,7 +293,16 @@ export class HudCanvas {
     const q = String(promptText || "").trim();
     const low = q.toLowerCase();
 
-    // Try live Ollama local generate if available
+    if (/overload|danger|siren|heavy/i.test(low)) {
+      this.addLoad(65, "USER_OVERLOAD_COMMAND");
+      return `Load increased to ${this.loadPercent}%. ${this.dangerMode ? "Danger mode and red siren active!" : "Approaching danger threshold."}`;
+    }
+
+    if (/stop siren|reset|cool|safe/i.test(low)) {
+      this.resetDangerLoad();
+      return "Red siren stopped and system load reset to safe level.";
+    }
+
     const ollamaUrl = String(this.nodes.ollama?.url || "").trim();
     if (ollamaUrl) {
       const base = ollamaUrl.replace(/\/api\/tags.*$/i, "");
@@ -216,15 +329,15 @@ export class HudCanvas {
     }
 
     if (!q || /^(hi|hello|hey|namaste|नमस्ते|हेलो|हाय)$/i.test(low)) {
-      return `Hello! VOID-09 is online at ${this._formatPower(this.evolutionPower)}. How can I help you?`;
+      return `Hello! VOID-09 is online at ${this._formatPower(this.evolutionPower)} with load at ${this.loadPercent}%.`;
     }
     if (/power|hp|horse/i.test(low)) {
       return `Current power is ${this._formatPower(this.evolutionPower)} at step ${this.upgradeStep}.`;
     }
     if (/who|kaun|naam|name/i.test(low)) {
-      return "I am VOID-09, your HUD interface with voice and node controls.";
+      return "I am VOID-09, your HUD interface with voice, overload siren, and node controls.";
     }
-    return `Received "${q}". VOID-09 is active at ${this._formatPower(this.evolutionPower)}.`;
+    return `Received "${q}". Load at ${this.loadPercent}% // ${this._formatPower(this.evolutionPower)}.`;
   }
 
   speak(text, { pitch = 0.92, rate = 1.04, force = false } = {}) {
@@ -274,6 +387,7 @@ export class HudCanvas {
         const inputs = Array.from(document.querySelectorAll("input[type='text'], textarea"));
         const cmdInput = inputs.find((el) => !el.closest(".void09-node-drawer"));
         const query = cmdInput ? String(cmdInput.value || "").trim() : "";
+        this.addLoad(22, "EXECUTE_LOAD");
         this.doubleAndUpgrade("EXECUTE_2X_SURGE", false);
         const reply = await this._generateReply(query);
         this.setReply(reply, true);
@@ -386,7 +500,7 @@ export class HudCanvas {
         this.setReply(`Detected ${found.join(" and ")}.`);
       }
     } else {
-      this.bridgeStatus = `100% // ${this._formatPower(this.evolutionPower)} // 20K HUMANS + 10K ANIMALS`;
+      this.bridgeStatus = `100% // ${this._formatPower(this.evolutionPower)} // LOAD:${this.loadPercent}%`;
       if (!silentSpark) {
         this.triggerSpark("AUTO_DETECT_NONE", 1.0);
         this.setReply("Scan complete. Enter required API keys for OpenClaw, Mythos, and Grok.");
@@ -474,7 +588,7 @@ export class HudCanvas {
     if (now - this.lastErrorSparkAt < 240 && this.sparkIntensity > 0.5) return;
     this.lastErrorSparkAt = now;
     this.sparkReason = String(reason || "SYSTEM_ERROR");
-    this.sparkIntensity = Math.min(1.5, Math.max(this.sparkIntensity, power));
+    this.sparkIntensity = Math.min(1.6, Math.max(this.sparkIntensity, power));
 
     const rect = this.canvas ? this.canvas.getBoundingClientRect() : { width: 640, height: 320 };
     const w = Math.max(300, rect.width || 640);
@@ -482,10 +596,10 @@ export class HudCanvas {
     const cx = w * 0.5;
     const cy = h * 0.42;
 
-    const count = Math.floor(42 * power);
+    const count = Math.floor(45 * power);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = (2.4 + Math.random() * 9.2) * power;
+      const speed = (2.5 + Math.random() * 9.5) * power;
       const hot = Math.random();
       const color =
         hot > 0.7 ? "#ffffff" :
@@ -602,6 +716,27 @@ export class HudCanvas {
       voiceBtn.style.color = this.voiceEnabled ? "#86efac" : "#f87171";
       if (this.voiceEnabled) {
         this.speak("Robot voice activated.", { force: true });
+      }
+    });
+
+    const sirenBtn = document.createElement("button");
+    sirenBtn.type = "button";
+    sirenBtn.textContent = "TEST RED SIREN";
+    sirenBtn.style.cssText = [
+      "background:rgba(15,23,42,0.92)",
+      "color:#fca5a5",
+      "border:1px solid rgba(248,113,113,0.75)",
+      "padding:4px 7px",
+      "cursor:pointer",
+      "text-transform:uppercase"
+    ].join(";");
+    this._sirenBtn = sirenBtn;
+    sirenBtn.addEventListener("click", () => {
+      if (this.dangerMode) {
+        this.resetDangerLoad();
+      } else {
+        this.loadPercent = 100;
+        this.triggerDangerOverload("MANUAL_RED_SIREN");
       }
     });
 
@@ -781,6 +916,7 @@ export class HudCanvas {
 
     bar.appendChild(btn);
     bar.appendChild(voiceBtn);
+    bar.appendChild(sirenBtn);
     bar.appendChild(linksToggleBtn);
     bar.appendChild(makeLinkBtn("OLLAMA", "ollama"));
     bar.appendChild(makeLinkBtn("OPENCLAW", "openclaw"));
@@ -959,6 +1095,7 @@ export class HudCanvas {
 
   stop() {
     this.running = false;
+    this.stopSiren();
     this.stopScanner();
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
@@ -1013,9 +1150,10 @@ export class HudCanvas {
     const cy = ry + rh * 0.46 + normY * 10;
     const unit = Math.min(rw, rh);
     const speakPulse = this.voiceSpeaking ? (0.85 + 0.35 * Math.abs(Math.sin(now * 0.025))) : 1;
+    const sirenFlash = this.dangerMode ? (0.5 + 0.5 * Math.sin(now * 0.02)) : 0;
 
     const aura = ctx.createRadialGradient(cx, cy - unit * 0.04, unit * 0.04, cx, cy, unit * 0.58 * speakPulse);
-    aura.addColorStop(0, "rgba(255, 55, 55, 0.45)");
+    aura.addColorStop(0, this.dangerMode ? `rgba(255, 25, 25, ${0.45 + 0.35 * sirenFlash})` : "rgba(255, 55, 55, 0.45)");
     aura.addColorStop(0.55, "rgba(253, 224, 71, 0.14)");
     aura.addColorStop(1, "rgba(5, 7, 13, 0)");
     ctx.fillStyle = aura;
@@ -1024,7 +1162,7 @@ export class HudCanvas {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate((now * 0.0018) % (Math.PI * 2));
-    ctx.strokeStyle = "rgba(255, 85, 85, 0.65)";
+    ctx.strokeStyle = this.dangerMode ? "rgba(255, 45, 45, 0.88)" : "rgba(255, 85, 85, 0.65)";
     ctx.lineWidth = 1.7;
     ctx.setLineDash([14, 7]);
     ctx.beginPath();
@@ -1035,7 +1173,7 @@ export class HudCanvas {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate((-now * 0.0028) % (Math.PI * 2));
-    ctx.strokeStyle = "rgba(253, 224, 71, 0.6)";
+    ctx.strokeStyle = this.dangerMode ? "rgba(255, 30, 30, 0.82)" : "rgba(253, 224, 71, 0.6)";
     ctx.lineWidth = 1.3;
     ctx.setLineDash([6, 5]);
     ctx.beginPath();
@@ -1048,7 +1186,7 @@ export class HudCanvas {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.fillStyle = "#0c0f18";
-    ctx.strokeStyle = this.voiceSpeaking ? "rgba(253, 224, 71, 0.98)" : "rgba(248, 113, 113, 0.92)";
+    ctx.strokeStyle = this.dangerMode ? "rgba(255, 35, 35, 0.98)" : (this.voiceSpeaking ? "rgba(253, 224, 71, 0.98)" : "rgba(248, 113, 113, 0.92)");
     ctx.lineWidth = 2.0;
 
     ctx.beginPath();
@@ -1081,8 +1219,8 @@ export class HudCanvas {
     const openFactor = Math.max(0.08, 1 - blinkAmt);
 
     const pulse = 0.8 + 0.2 * Math.sin(now * 0.01);
-    ctx.fillStyle = this.voiceSpeaking ? `rgba(253, 224, 71, ${pulse})` : `rgba(255, 50, 50, ${pulse})`;
-    ctx.shadowColor = this.voiceSpeaking ? "#fde047" : "#ff2a2a";
+    ctx.fillStyle = this.dangerMode ? `rgba(255, 25, 25, ${pulse})` : (this.voiceSpeaking ? `rgba(253, 224, 71, ${pulse})` : `rgba(255, 50, 50, ${pulse})`);
+    ctx.shadowColor = this.dangerMode ? "#ff1111" : (this.voiceSpeaking ? "#fde047" : "#ff2a2a");
     ctx.shadowBlur = 14;
 
     ctx.beginPath();
@@ -1100,7 +1238,7 @@ export class HudCanvas {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    ctx.strokeStyle = this.voiceSpeaking ? "rgba(253, 224, 71, 0.85)" : "rgba(252, 165, 165, 0.5)";
+    ctx.strokeStyle = this.dangerMode ? "rgba(255, 50, 50, 0.9)" : (this.voiceSpeaking ? "rgba(253, 224, 71, 0.85)" : "rgba(252, 165, 165, 0.5)");
     ctx.lineWidth = 1.3;
     for (let g = 0; g < 3; g++) {
       const gy = headH * (0.24 + g * 0.09);
@@ -1114,10 +1252,10 @@ export class HudCanvas {
 
     ctx.restore();
 
-    ctx.fillStyle = "rgba(253, 224, 71, 0.95)";
+    ctx.fillStyle = this.dangerMode ? "rgba(255, 70, 70, 0.98)" : "rgba(253, 224, 71, 0.95)";
     ctx.font = "10px monospace";
-    const voiceTag = this.voiceSpeaking ? " // 🔊 SPEAKING" : (this.voiceEnabled ? " // VOICE:ON" : " // VOICE:OFF");
-    ctx.fillText(`CORE // 20K H + 10K A // ${this._formatPower(this.evolutionPower)}${voiceTag}`, rx + 10, ry + 18);
+    const voiceTag = this.dangerMode ? " // 🚨 RED SIREN" : (this.voiceSpeaking ? " // 🔊 SPEAKING" : (this.voiceEnabled ? " // VOICE:ON" : " // VOICE:OFF"));
+    ctx.fillText(`CORE // LOAD:${this.loadPercent}% // ${this._formatPower(this.evolutionPower)}${voiceTag}`, rx + 10, ry + 18);
 
     ctx.restore();
   }
@@ -1254,7 +1392,7 @@ export class HudCanvas {
       this._drawRobotPane(ctx, now, pad, pad, paneW, paneH);
       this._drawCameraPane(ctx, now, pad + paneW + gap, pad, boxW - paneW - gap, paneH);
 
-      ctx.strokeStyle = "rgba(248, 113, 113, 0.65)";
+      ctx.strokeStyle = this.dangerMode ? "rgba(255, 35, 35, 0.9)" : "rgba(248, 113, 113, 0.65)";
       ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.moveTo(pad + paneW + gap * 0.5, pad + 6);
@@ -1266,7 +1404,11 @@ export class HudCanvas {
       this._drawCameraPane(ctx, now, pad, pad + paneH + gap, boxW, boxH - paneH - gap);
     }
 
-    if (this.sparkIntensity > 0.05) {
+    if (this.dangerMode) {
+      const flashAlpha = 0.12 + 0.14 * Math.abs(Math.sin(now * 0.018));
+      ctx.fillStyle = `rgba(255, 20, 20, ${flashAlpha})`;
+      ctx.fillRect(pad, pad, boxW, boxH);
+    } else if (this.sparkIntensity > 0.05) {
       ctx.fillStyle = `rgba(255, 60, 30, ${Math.min(0.25, this.sparkIntensity * 0.18)})`;
       ctx.fillRect(pad, pad, boxW, boxH);
     }
@@ -1274,7 +1416,7 @@ export class HudCanvas {
     for (const arc of this.arcs) {
       ctx.save();
       ctx.globalAlpha = Math.max(0, Math.min(1, arc.life));
-      ctx.strokeStyle = "#fde047";
+      ctx.strokeStyle = this.dangerMode ? "#ff3b3b" : "#fde047";
       ctx.lineWidth = 2.6;
       ctx.shadowColor = "#ff3b1f";
       ctx.shadowBlur = 14;
@@ -1300,8 +1442,8 @@ export class HudCanvas {
     }
 
     const bLen = 18;
-    ctx.strokeStyle = this.sparkIntensity > 0.2 ? "rgba(253, 224, 71, 0.98)" : "rgba(248, 113, 113, 0.95)";
-    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = this.dangerMode ? "rgba(255, 30, 30, 0.98)" : (this.sparkIntensity > 0.2 ? "rgba(253, 224, 71, 0.98)" : "rgba(248, 113, 113, 0.95)");
+    ctx.lineWidth = this.dangerMode ? 3.0 : 2.2;
     ctx.beginPath();
     ctx.moveTo(pad + 4, pad + 4 + bLen);
     ctx.lineTo(pad + 4, pad + 4);
@@ -1323,10 +1465,10 @@ export class HudCanvas {
     ctx.fillStyle = "rgba(4, 6, 12, 0.88)";
     ctx.fillRect(pad + 4, height - pad - 34, boxW - 8, 30);
 
-    ctx.fillStyle = "rgba(253, 224, 71, 0.96)";
+    ctx.fillStyle = this.dangerMode ? "rgba(255, 65, 65, 0.98)" : "rgba(253, 224, 71, 0.96)";
     ctx.font = "11px monospace";
-    const sparkTag = this.sparkIntensity > 0.1 ? ` // ⚡ ${this.sparkReason}` : "";
-    ctx.fillText(`VOID-09 ${this.readinessPercent}% (STEP #${this.upgradeStep} // ${this._formatPower(this.evolutionPower)}) // ${this.state}${sparkTag}`, pad + 12, height - pad - 21);
+    const dangerTag = this.dangerMode ? " // 🚨 DANGER OVERLOAD" : (this.sparkIntensity > 0.1 ? ` // ⚡ ${this.sparkReason}` : "");
+    ctx.fillText(`VOID-09 LOAD:${this.loadPercent}% (STEP #${this.upgradeStep} // ${this._formatPower(this.evolutionPower)}) // ${this.state}${dangerTag}`, pad + 12, height - pad - 21);
     ctx.fillStyle = "rgba(252, 165, 165, 0.9)";
     ctx.font = "10px monospace";
     ctx.fillText(`${this.bridgeStatus} | ${this.scannerStatus}`, pad + 12, height - pad - 8);
