@@ -127,8 +127,7 @@ export class HudCanvas {
 
     // Live Face & Eye Scanner state
     this.scannerActive = false;
-    this.scannerStatus = "CAM STANDBY // CLICK [SCAN FACE & EYES]";
-    this.videoEl = null;
+this.videoEl = null;
     this.stream = null;
     this.detector = null;
     this.detectedFace = null;
@@ -372,15 +371,7 @@ export class HudCanvas {
       const execBtn = buttons.find((b) => /execute/i.test((b.textContent || "").trim()));
       if (!execBtn || execBtn.dataset.voidVoiceBound) return;
       execBtn.dataset.voidVoiceBound = "1";
-      execBtn.addEventListener("click", async () => {
-        const inputs = Array.from(document.querySelectorAll("input[type='text'], textarea"));
-        const cmdInput = inputs.find((el) => !el.closest(".void09-node-drawer"));
-        const query = cmdInput ? String(cmdInput.value || "").trim() : "";
-        this.doubleAndUpgrade("EXECUTE_2X_SURGE", false, false);
-        const reply = await this._generateReply(query);
-        this.setReply(reply, true);
-      });
-    };
+      exec};
     setTimeout(attach, 300);
     setTimeout(attach, 1200);
   }
@@ -679,17 +670,7 @@ export class HudCanvas {
       "text-transform:uppercase"
     ].join(";");
 
-    btn.addEventListener("click", () => {
-      if (this.scannerActive) {
-        this.stopScanner();
-        btn.textContent = "SCAN FACE & EYES";
-        this.setReply("Scanner stopped.", false);
-      } else {
-        this.startScanner().then((ok) => {
-          btn.textContent = ok ? "STOP SCAN" : "SCAN FACE & EYES";
-          if (ok) this.setReply("Optic scanner online. Tracking face and eyes.", false);
-        });
-      }
+    }
     });
 
     const lockBtn = document.createElement("button");
@@ -703,11 +684,7 @@ export class HudCanvas {
       "cursor:pointer",
       "text-transform:uppercase"
     ].join(";");
-    lockBtn.addEventListener("click", () => {
-      this.engageDefensiveLockdown(15000, "MANUAL_DEFENSE_LOCK");
-    });
-
-    const sirenBtn = document.createElement("button");
+    lockconst sirenBtn = document.createElement("button");
     sirenBtn.type = "button";
     sirenBtn.textContent = "SIREN ALERT";
     sirenBtn.style.cssText = [
@@ -718,11 +695,7 @@ export class HudCanvas {
       "cursor:pointer",
       "text-transform:uppercase"
     ].join(";");
-    sirenBtn.addEventListener("click", () => {
-      this.triggerDangerAlert("MANUAL_TEST_ALERT", 5000);
-    });
-
-    const voiceBtn = document.createElement("button");
+    sirenconst voiceBtn = document.createElement("button");
     voiceBtn.type = "button";
     voiceBtn.textContent = this.voiceEnabled ? "VOICE: ON" : "VOICE: OFF";
     voiceBtn.style.cssText = [
@@ -733,13 +706,7 @@ export class HudCanvas {
       "cursor:pointer",
       "text-transform:uppercase"
     ].join(";");
-    voiceBtn.addEventListener("click", () => {
-      this.voiceEnabled = !this.voiceEnabled;
-      voiceBtn.textContent = this.voiceEnabled ? "VOICE: ON" : "VOICE: OFF";
-      voiceBtn.style.color = this.voiceEnabled ? "#86efac" : "#f87171";
-      if (this.voiceEnabled) {
-        this.speak("Robot voice activated.", { force: true });
-      }
+    voice}
     });
 
     const drawer = document.createElement("div");
@@ -814,11 +781,7 @@ export class HudCanvas {
     detectBtn.type = "button";
     detectBtn.textContent = "AUTO-DETECT LINKS";
     detectBtn.style.cssText = "width:100%;background:rgba(15,23,42,0.95);color:#fde047;border:1px solid rgba(253,224,71,0.6);padding:4px 6px;margin-bottom:5px;cursor:pointer;";
-    detectBtn.addEventListener("click", () => {
-      reqErrorEl.style.display = "none";
-      this.autoDetectAndAddNodes(false);
-    });
-    drawer.appendChild(detectBtn);
+    detectdrawer.appendChild(detectBtn);
 
     drawer.appendChild(reqErrorEl);
 
@@ -826,14 +789,7 @@ export class HudCanvas {
     saveBtn.type = "button";
     saveBtn.textContent = "APPLY & SYNC REQUIRED NODES";
     saveBtn.style.cssText = "width:100%;background:rgba(185,28,28,0.95);color:#fff;border:1px solid rgba(254,202,202,0.8);padding:4px 6px;cursor:pointer;";
-    saveBtn.addEventListener("click", () => {
-      this.requiredNodes.forEach((key) => {
-        const node = this.nodes[key];
-        this.configureNode(key, {
-          url: inputs[key].urlInput.value.trim(),
-          apiKey: node.keyRequired ? inputs[key].keyInput.value.trim() : ""
-        });
-      });
+    save});
       const missing = this.getMissingRequiredNodes();
       if (missing.length > 0) {
         const names = missing.map((k) => this.nodes[k].label).join(", ");
@@ -859,12 +815,7 @@ export class HudCanvas {
       "cursor:pointer",
       "text-transform:uppercase"
     ].join(";");
-    linksToggleBtn.addEventListener("click", () => {
-      reqErrorEl.style.display = "none";
-      drawer.style.display = drawer.style.display === "none" ? "block" : "none";
-    });
-
-    const makeLinkBtn = (label, key) => {
+    linksToggleconst makeLinkBtn = (label, key) => {
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = `${label}*`;
@@ -891,18 +842,7 @@ export class HudCanvas {
       "cursor:pointer",
       "text-transform:uppercase"
     ].join(";");
-    syncBtn.addEventListener("click", () => {
-      if (!this.validateRequiredNodes()) {
-        drawer.style.display = "block";
-        const missing = this.getMissingRequiredNodes().map((k) => this.nodes[k].label).join(", ");
-        reqErrorEl.textContent = `REQUIRED MISSING: ${missing}`;
-        reqErrorEl.style.display = "block";
-        return;
-      }
-      this.syncAllNodes();
-    });
-
-    const replyBar = document.createElement("div");
+    syncconst replyBar = document.createElement("div");
     replyBar.className = "void09-reply-bar";
     replyBar.style.cssText = [
       "margin-top:6px",
@@ -929,130 +869,6 @@ export class HudCanvas {
     parent.appendChild(bar);
     parent.appendChild(drawer);
     parent.insertAdjacentElement("afterend", replyBar);
-  }
-
-  async startScanner() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      this.scannerStatus = "CAM API UNAVAILABLE";
-      this.triggerDangerAlert("CAM_API_ERROR", 4000);
-      return false;
-    }
-    try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 360 } },
-        audio: false
-      });
-      this.videoEl = document.createElement("video");
-      this.videoEl.srcObject = this.stream;
-      this.videoEl.muted = true;
-      this.videoEl.playsInline = true;
-      await this.videoEl.play();
-      this.prevFrameData = null;
-      this.scannerActive = true;
-      this.scannerStatus = "SIDE CAM LIVE // TRACKING FACE & MOTION";
-      return true;
-    } catch {
-      this.scannerStatus = "CAM STANDBY (PERMISSION NOT GRANTED)";
-      this.scannerActive = false;
-      return false;
-    }
-  }
-
-  stopScanner() {
-    this.scannerActive = false;
-    this.detectedFace = null;
-    this.prevFrameData = null;
-    this.scannerStatus = "CAM STANDBY // CLICK [SCAN FACE & EYES]";
-    if (this.stream) {
-      this.stream.getTracks().forEach((t) => t.stop());
-      this.stream = null;
-    }
-    this.videoEl = null;
-  }
-
-  _trackByMotion() {
-    if (!this.motionCtx || !this.videoEl) return false;
-    const mw = this.motionCanvas.width;
-    const mh = this.motionCanvas.height;
-    this.motionCtx.save();
-    this.motionCtx.scale(-1, 1);
-    this.motionCtx.drawImage(this.videoEl, -mw, 0, mw, mh);
-    this.motionCtx.restore();
-
-    const frame = this.motionCtx.getImageData(0, 0, mw, mh).data;
-    let moved = false;
-
-    if (this.prevFrameData) {
-      let sumX = 0;
-      let sumY = 0;
-      let weightSum = 0;
-      for (let y = 2; y < mh - 2; y += 2) {
-        for (let x = 2; x < mw - 2; x += 2) {
-          const idx = (y * mw + x) * 4;
-          const diff =
-            Math.abs(frame[idx] - this.prevFrameData[idx]) +
-            Math.abs(frame[idx + 1] - this.prevFrameData[idx + 1]) +
-            Math.abs(frame[idx + 2] - this.prevFrameData[idx + 2]);
-          if (diff > 36) {
-            const w = Math.min(4, diff / 45);
-            sumX += (x / mw) * w;
-            sumY += (y / mh) * w;
-            weightSum += w;
-          }
-        }
-      }
-      if (weightSum > 14) {
-        const cx = Math.max(0.12, Math.min(0.88, sumX / weightSum));
-        const cy = Math.max(0.14, Math.min(0.84, sumY / weightSum));
-        this.detectedFace = { x: cx, y: cy, w: 0.25, h: 0.36 };
-        this.gazeX = (cx - 0.5) * 2;
-        this.gazeY = (cy - 0.5) * 2;
-        this.scannerStatus = `MOVEMENT LOCK // X:${Math.round(cx * 100)}% Y:${Math.round(cy * 100)}%`;
-        moved = true;
-      }
-    }
-
-    this.prevFrameData = new Uint8ClampedArray(frame);
-    return moved;
-  }
-
-  async _sampleSubject(now) {
-    if (!this.scannerActive || !this.videoEl || this.videoEl.readyState < 2) return;
-    if (now - this.lastScanAt < 80) return;
-    this.lastScanAt = now;
-
-    if (this.detector) {
-      try {
-        const faces = await this.detector.detect(this.videoEl);
-        const vw = this.videoEl.videoWidth || 640;
-        const vh = this.videoEl.videoHeight || 360;
-        if (faces && faces.length > 0) {
-          const b = faces[0].boundingBox;
-          const nx = 1 - (b.x + b.width * 0.5) / vw;
-          const ny = (b.y + b.height * 0.5) / vh;
-          const cx = Math.max(0.10, Math.min(0.90, nx));
-          const cy = Math.max(0.12, Math.min(0.86, ny));
-          this.detectedFace = {
-            x: cx,
-            y: cy,
-            w: Math.max(0.15, Math.min(0.46, b.width / vw)),
-            h: Math.max(0.18, Math.min(0.58, b.height / vh))
-          };
-          this.gazeX = (cx - 0.5) * 2;
-          this.gazeY = (cy - 0.5) * 2;
-          this.scannerStatus = `FACE + EYES LOCKED // X:${Math.round(cx * 100)}% Y:${Math.round(cy * 100)}%`;
-          return;
-        }
-      } catch {
-        this.detector = null;
-      }
-    }
-
-    const hadMotion = this._trackByMotion();
-    if (!hadMotion && !this.detectedFace) {
-      this.detectedFace = { x: 0.5, y: 0.44, w: 0.24, h: 0.36 };
-      this.scannerStatus = "LIVE CAM READY // MOVE TO TRACK";
-    }
   }
 
   _updateSmoothFace() {
@@ -1134,8 +950,7 @@ export class HudCanvas {
 
   stop() {
     this.running = false;
-    this.stopScanner();
-    if (this.rafId) {
+if (this.rafId) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
@@ -1420,8 +1235,6 @@ export class HudCanvas {
     this.tick += 1;
     this._updateSelfEvolution(now);
     this.updateBlink(now);
-    this._sampleSubject(now);
-    this._updateSmoothFace();
     this._updateSparks();
 
     const shakeMult = danger ? 1.25 : 1;
@@ -1433,28 +1246,9 @@ export class HudCanvas {
     ctx.fillRect(-12, -12, width + 24, height + 24);
 
     const pad = 6;
-    const gap = 8;
     const boxW = Math.max(1, width - pad * 2);
     const boxH = Math.max(1, height - pad * 2);
-    const sideBySide = boxW >= 460;
-
-    if (sideBySide) {
-      const paneW = Math.floor((boxW - gap) * 0.5);
-      const paneH = boxH;
-      this._drawRobotPane(ctx, now, pad, pad, paneW, paneH);
-      this._drawCameraPane(ctx, now, pad + paneW + gap, pad, boxW - paneW - gap, paneH);
-
-      ctx.strokeStyle = danger ? "#ff2424" : "rgba(248, 113, 113, 0.65)";
-      ctx.lineWidth = danger ? 2.2 : 1.6;
-      ctx.beginPath();
-      ctx.moveTo(pad + paneW + gap * 0.5, pad + 6);
-      ctx.lineTo(pad + paneW + gap * 0.5, pad + paneH - 6);
-      ctx.stroke();
-    } else {
-      const paneH = Math.floor((boxH - gap) * 0.5);
-      this._drawRobotPane(ctx, now, pad, pad, boxW, paneH);
-      this._drawCameraPane(ctx, now, pad, pad + paneH + gap, boxW, boxH - paneH - gap);
-    }
+    this._drawRobotPane(ctx, now, pad, pad, boxW, boxH);
 
     if (danger) {
       const flashAlpha = 0.14 + 0.14 * Math.abs(Math.sin(now * 0.022));
@@ -1526,12 +1320,11 @@ export class HudCanvas {
     ctx.fillText(`VOID-09 ${this.readinessPercent}% (STEP #${this.upgradeStep} // ${this._formatPower(this.evolutionPower)}) // ${danger ? "RED_ALERT" : this.state}${alertTag}`, pad + 12, height - pad - 21);
     ctx.fillStyle = danger ? "#ff9999" : "rgba(252, 165, 165, 0.9)";
     ctx.font = "10px monospace";
-    ctx.fillText(`${this.bridgeStatus} | ${this.scannerStatus}`, pad + 12, height - pad - 8);
+    ctx.fillText(`${this.bridgeStatus} // NO-CAM MODE`, pad + 12, height - pad - 8);
 
     ctx.restore();
     ctx.restore();
   }
-
   loop() {
     const frame = (now) => {
       if (!this.running) return;
