@@ -43,11 +43,11 @@ export class HudCanvas {
     this.stream = null;
     this.detector = null;
     this.detectedFace = null;
-    this.smoothFace = { x: 0.5, y: 0.40, w: 0.24, h: 0.36 };
+    this.smoothFace = { x: 0.5, y: 0.44, w: 0.24, h: 0.36 };
     this.lastScanAt = 0;
     this.motionCanvas = document.createElement("canvas");
-    this.motionCanvas.width = 64;
-    this.motionCanvas.height = 48;
+    this.motionCanvas.width = 80;
+    this.motionCanvas.height = 60;
     this.motionCtx = this.motionCanvas.getContext("2d", { willReadFrequently: true });
     this.prevFrameData = null;
 
@@ -199,8 +199,9 @@ export class HudCanvas {
       this.videoEl.muted = true;
       this.videoEl.playsInline = true;
       await this.videoEl.play();
+      this.prevFrameData = null;
       this.scannerActive = true;
-      this.scannerStatus = "SIDE CAM LIVE // FACE + EYES SCANNING";
+      this.scannerStatus = "SIDE CAM LIVE // TRACKING FACE & MOTION";
       return true;
     } catch {
       this.scannerStatus = "CAM PERMISSION DENIED / OFFLINE";
@@ -213,6 +214,7 @@ export class HudCanvas {
   stopScanner() {
     this.scannerActive = false;
     this.detectedFace = null;
+    this.prevFrameData = null;
     this.scannerStatus = "CAM STANDBY // CLICK [SCAN FACE & EYES]";
     if (this.stream) {
       this.stream.getTracks().forEach((t) => t.stop());
@@ -221,9 +223,55 @@ export class HudCanvas {
     this.videoEl = null;
   }
 
+  _trackByMotion() {
+    if (!this.motionCtx || !this.videoEl) return false;
+    const mw = this.motionCanvas.width;
+    const mh = this.motionCanvas.height;
+    this.motionCtx.save();
+    this.motionCtx.scale(-1, 1);
+    this.motionCtx.drawImage(this.videoEl, -mw, 0, mw, mh);
+    this.motionCtx.restore();
+
+    const frame = this.motionCtx.getImageData(0, 0, mw, mh).data;
+    let moved = false;
+
+    if (this.prevFrameData) {
+      let sumX = 0;
+      let sumY = 0;
+      let weightSum = 0;
+      for (let y = 2; y < mh - 2; y += 2) {
+        for (let x = 2; x < mw - 2; x += 2) {
+          const idx = (y * mw + x) * 4;
+          const diff =
+            Math.abs(frame[idx] - this.prevFrameData[idx]) +
+            Math.abs(frame[idx + 1] - this.prevFrameData[idx + 1]) +
+            Math.abs(frame[idx + 2] - this.prevFrameData[idx + 2]);
+          if (diff > 36) {
+            const w = Math.min(4, diff / 45);
+            sumX += (x / mw) * w;
+            sumY += (y / mh) * w;
+            weightSum += w;
+          }
+        }
+      }
+      if (weightSum > 14) {
+        const cx = Math.max(0.12, Math.min(0.88, sumX / weightSum));
+        const cy = Math.max(0.14, Math.min(0.84, sumY / weightSum));
+        this.detectedFace = { x: cx, y: cy, w: 0.25, h: 0.36 };
+        this.gazeX = (cx - 0.5) * 2;
+        this.gazeY = (cy - 0.5) * 2;
+        this.scannerStatus = `MOVEMENT LOCK // X:${Math.round(cx * 100)}% Y:${Math.round(cy * 100)}%`;
+        moved = true;
+      }
+    }
+
+    this.prevFrameData = new Uint8ClampedArray(frame);
+    return moved;
+  }
+
   async _sampleSubject(now) {
     if (!this.scannerActive || !this.videoEl || this.videoEl.readyState < 2) return;
-    if (now - this.lastScanAt < 130) return;
+    if (now - this.lastScanAt < 80) return;
     this.lastScanAt = now;
 
     if (this.detector) {
@@ -235,33 +283,34 @@ export class HudCanvas {
           const b = faces[0].boundingBox;
           const nx = 1 - (b.x + b.width * 0.5) / vw;
           const ny = (b.y + b.height * 0.5) / vh;
+          const cx = Math.max(0.10, Math.min(0.90, nx));
+          const cy = Math.max(0.12, Math.min(0.86, ny));
           this.detectedFace = {
-            x: Math.max(0.28, Math.min(0.72, nx)),
-            y: Math.max(0.34, Math.min(0.52, ny)),
-            w: Math.max(0.16, Math.min(0.34, b.width / vw)),
-            h: Math.max(0.20, Math.min(0.44, b.height / vh))
+            x: cx,
+            y: cy,
+            w: Math.max(0.15, Math.min(0.46, b.width / vw)),
+            h: Math.max(0.18, Math.min(0.58, b.height / vh))
           };
-          this.gazeX = (this.detectedFace.x - 0.5) * 2;
-          this.gazeY = (this.detectedFace.y - 0.5) * 2;
-          this.scannerStatus = "FACE + EYES LOCKED // HEAD ZONE STABLE";
+          this.gazeX = (cx - 0.5) * 2;
+          this.gazeY = (cy - 0.5) * 2;
+          this.scannerStatus = `FACE + EYES LOCKED // X:${Math.round(cx * 100)}% Y:${Math.round(cy * 100)}%`;
           return;
         }
-        this.detectedFace = { x: 0.5, y: 0.40, w: 0.24, h: 0.36 };
-        this.scannerStatus = "SIDE CAM LIVE // EYE-ZONE LOCK";
-        return;
       } catch {
         this.detector = null;
       }
     }
 
-    // Keep head/eye lock steady in upper-center head zone so hand movement doesn't pull it down
-    this.detectedFace = { x: 0.5, y: 0.40, w: 0.24, h: 0.36 };
-    this.scannerStatus = "SIDE CAM LIVE // FACE + EYES LOCKED";
+    const hadMotion = this._trackByMotion();
+    if (!hadMotion && !this.detectedFace) {
+      this.detectedFace = { x: 0.5, y: 0.44, w: 0.24, h: 0.36 };
+      this.scannerStatus = "LIVE CAM READY // MOVE TO TRACK";
+    }
   }
 
   _updateSmoothFace() {
-    const target = this.detectedFace || { x: 0.5, y: 0.40, w: 0.24, h: 0.36 };
-    const t = 0.14;
+    const target = this.detectedFace || { x: 0.5, y: 0.44, w: 0.24, h: 0.36 };
+    const t = 0.28;
     this.smoothFace.x += (target.x - this.smoothFace.x) * t;
     this.smoothFace.y += (target.y - this.smoothFace.y) * t;
     this.smoothFace.w += (target.w - this.smoothFace.w) * t;
@@ -360,8 +409,8 @@ export class HudCanvas {
 
     const normX = Math.max(-1, Math.min(1, this.gazeX));
     const normY = Math.max(-1, Math.min(1, this.gazeY));
-    const cx = rx + rw * 0.5 + normX * 10;
-    const cy = ry + rh * 0.46 + normY * 7;
+    const cx = rx + rw * 0.5 + normX * 14;
+    const cy = ry + rh * 0.46 + normY * 10;
     const unit = Math.min(rw, rh);
 
     const aura = ctx.createRadialGradient(cx, cy - unit * 0.04, unit * 0.04, cx, cy, unit * 0.52);
@@ -489,12 +538,12 @@ export class HudCanvas {
       ctx.fillRect(cx, cy, cw, ch);
 
       const sf = this.smoothFace;
-      const fw = Math.max(64, Math.min(cw * 0.46, sf.w * cw * 0.75));
-      const fh = Math.max(76, Math.min(ch * 0.52, sf.h * ch * 0.75));
-      const minX = cx + 18 + fw * 0.5;
-      const maxX = cx + cw - 18 - fw * 0.5;
-      const minY = cy + 34 + fh * 0.5;
-      const maxY = cy + ch * 0.58 - fh * 0.5;
+      const fw = Math.max(66, Math.min(cw * 0.48, sf.w * cw * 0.78));
+      const fh = Math.max(78, Math.min(ch * 0.58, sf.h * ch * 0.78));
+      const minX = cx + 14 + fw * 0.5;
+      const maxX = cx + cw - 14 - fw * 0.5;
+      const minY = cy + 30 + fh * 0.5;
+      const maxY = cy + ch - 26 - fh * 0.5;
 
       const fx = Math.max(minX, Math.min(maxX, cx + sf.x * cw));
       const fy = Math.max(minY, Math.min(maxY, cy + sf.y * ch));
@@ -507,7 +556,7 @@ export class HudCanvas {
 
       const leftEyeX = fx - fw * 0.22;
       const rightEyeX = fx + fw * 0.22;
-      const scanEyeY = fy - fh * 0.10;
+      const scanEyeY = fy - fh * 0.12;
 
       ctx.strokeStyle = "rgba(254, 240, 138, 0.95)";
       ctx.lineWidth = 1.3;
@@ -522,7 +571,7 @@ export class HudCanvas {
 
       ctx.fillStyle = "rgba(254, 202, 202, 0.98)";
       ctx.font = "10px monospace";
-      ctx.fillText("FACE + EYES LOCKED", leftBox, topBox - 5);
+      ctx.fillText("FACE + EYES LOCKED", leftBox, Math.max(cy + 26, topBox - 5));
     } else {
       ctx.strokeStyle = "rgba(239, 68, 68, 0.22)";
       ctx.strokeRect(cx + 12, cy + 28, cw - 24, ch - 40);
