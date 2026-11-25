@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VOID-09 // Desktop, Apple & Linux Download</title>
+  <style>
+    :root {
+      --bg: #040509;
+      --panel: #0b0e17;
+      --border: rgba(248, 113, 113, 0.45);
+      --accent: #ff2e2e;
+      --gold: #fde047;
+      --text: #f8fafc;
+      --muted: #fca5a5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: radial-gradient(circle at top, #160508 0%, var(--bg) 60%);
+      color: var(--text);
+      font-family: Consolas, "Courier New", monospace;
+      line-height: 1.5;
+    }
+    .wrap {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    .hero {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .badge {
+      display: inline-block;
+      color: var(--gold);
+      border: 1px solid rgba(253, 224, 71, 0.45);
+      padding: 3px 8px;
+      font-size: 11px;
+      margin-bottom: 10px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      color: #ff5252;
+      letter-spacing: 1px;
+    }
+    p {
+      margin: 0 0 12px;
+      color: #e2e8f0;
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 18px;
+    }
+    .card h2 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      color: var(--gold);
+    }
+    .cmd-box {
+      background: #05070d;
+      border: 1px solid rgba(253, 224, 71, 0.35);
+      padding: 10px;
+      font-size: 11px;
+      color: #fde047;
+      overflow-x: auto;
+      margin: 10px 0;
+      user-select: all;
+    }
+    .btn {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 8px 12px;
+      background: rgba(185, 28, 28, 0.92);
+      color: #fff;
+      text-decoration: none;
+      border: 1px solid rgba(254, 202, 202, 0.75);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .btn:hover {
+      background: rgba(220, 38, 38, 1);
+    }
+    .notice {
+      background: rgba(127, 29, 29, 0.28);
+      border: 1px solid rgba(255, 46, 46, 0.65);
+      padding: 14px 18px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .notice strong {
+      color: var(--gold);
+    }
+    a {
+      color: var(--gold);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div class="badge">VOID-09 // DESKTOP, APPLE (MACOS) &amp; LINUX DISTRIBUTION</div>
+      <h1>VOID-09 SYSTEM DOWNLOAD</h1>
+      <p>
+        Install VOID-09 directly from your terminal to create a local desktop folder and launch the application
+        on Windows Desktop, Apple (macOS), or Linux.
+      </p>
+      <a class="btn" href="./index.html">OPEN HUD INTERFACE</a>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>WINDOWS DESKTOP</h2>
+        <p>Creates a Desktop folder with <code>VOID-09.bat</code> and desktop app support.</p>
+        <div class="cmd-box">irm "https://raw.githubusercontent.com/kavinmusicc-code/-red-protocol-void-09/main/install-void09.ps1" | iex</div>
+        <a class="btn" href="./install-void09.ps1" download>DOWNLOAD install-void09.ps1</a>
+      </div>
+
+      <div class="card">
+        <h2>APPLE (MACOS) &amp; LINUX</h2>
+        <p>Clones the repository and creates <code>VOID-09.sh</code> for local launch.</p>
+        <div class="cmd-box">curl -fsSL "https://raw.githubusercontent.com/kavinmusicc-code/-red-protocol-void-09/main/install-void09.sh" | bash</div>
+        <a class="btn" href="./install-void09.sh" download>DOWNLOAD install-void09.sh</a>
+      </div>
+
+      <div class="card">
+        <h2>DESKTOP APP RUNTIME</h2>
+        <p>Run inside the project folder to start or package the Electron desktop app.</p>
+        <div class="cmd-box">npm install &amp;&amp; npm start</div>
+        <a class="btn" href="./VOID-09.bat" download>DOWNLOAD VOID-09.bat</a>
+      </div>
+    </div>
+
+    <div class="notice">
+      <strong>PLATFORM RESTRICTION:</strong> VOID-09 is intended strictly for Desktop (Windows), Apple (macOS), and Linux.
+      Access on Android devices is blocked.
+    </div>
+  </div>
+</body>
+</html>
