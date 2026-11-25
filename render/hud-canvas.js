@@ -23,11 +23,11 @@ export class HudCanvas {
     this.rafId = null;
     this.tick = 0;
 
-    // Continuous self-upgrade state
+    // Continuous self-upgrade state (+5 levels boost to LVL 15 / v2.5)
     this.lastUpgradeAt = performance.now();
-    this.upgradeStep = 1;
-    this.evolutionPower = 12;
-    this.upgradeLog = "CORE INITIALIZED // AUTO-EVOLUTION ACTIVE";
+    this.upgradeStep = 15;
+    this.evolutionPower = 148;
+    this.upgradeLog = "UPGRADE #15 // OVERDRIVE CORE BOOST (+5 LVL) // PWR:148";
 
     // Error spark state (only on real errors)
     this.sparks = [];
@@ -321,12 +321,12 @@ export class HudCanvas {
     if (now - this.lastUpgradeAt >= 2500) {
       this.lastUpgradeAt = now;
       this.upgradeStep += 1;
-      this.evolutionPower = Math.min(999, this.evolutionPower + Math.floor(4 + ((this.upgradeStep * 3) % 9)));
+      this.evolutionPower = Math.min(999, this.evolutionPower + Math.floor(6 + ((this.upgradeStep * 3) % 9)));
       const protocols = [
-        "NEURAL OPTIC GAIN",
-        "RETICLE OVERCLOCK",
-        "BIOMETRIC EYE-SYNC",
-        "CRIMSON CORE SURGE",
+        "OVERDRIVE OPTIC GAIN",
+        "TIER-2 RETICLE OVERCLOCK",
+        "APEX EYE-SYNC MATRIX",
+        "CRIMSON SURGE CORE",
         "PREDATOR VECTOR BOOST"
       ];
       const tag = protocols[this.upgradeStep % protocols.length];
@@ -413,17 +413,18 @@ export class HudCanvas {
     const cy = ry + rh * 0.46 + normY * 10;
     const unit = Math.min(rw, rh);
 
-    const aura = ctx.createRadialGradient(cx, cy - unit * 0.04, unit * 0.04, cx, cy, unit * 0.52);
-    aura.addColorStop(0, "rgba(239, 68, 68, 0.30)");
-    aura.addColorStop(0.6, "rgba(153, 27, 27, 0.10)");
+    const aura = ctx.createRadialGradient(cx, cy - unit * 0.04, unit * 0.04, cx, cy, unit * 0.54);
+    aura.addColorStop(0, "rgba(239, 68, 68, 0.34)");
+    aura.addColorStop(0.6, "rgba(153, 27, 27, 0.12)");
     aura.addColorStop(1, "rgba(5, 7, 13, 0)");
     ctx.fillStyle = aura;
     ctx.fillRect(rx, ry, rw, rh);
 
+    // Outer rotating tactical halo ring
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate((now * 0.001) % (Math.PI * 2));
-    ctx.strokeStyle = "rgba(248, 113, 113, 0.35)";
+    ctx.strokeStyle = "rgba(248, 113, 113, 0.38)";
     ctx.lineWidth = 1.4;
     ctx.setLineDash([12, 8]);
     ctx.beginPath();
@@ -431,12 +432,26 @@ export class HudCanvas {
     ctx.stroke();
     ctx.restore();
 
+    // Level 11+ Tier-2 inner counter-rotating overdrive ring
+    if (this.upgradeStep >= 11) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate((-now * 0.0018) % (Math.PI * 2));
+      ctx.strokeStyle = "rgba(253, 224, 71, 0.42)";
+      ctx.lineWidth = 1.1;
+      ctx.setLineDash([5, 6]);
+      ctx.beginPath();
+      ctx.arc(0, 0, unit * 0.39, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     const headW = unit * 0.34;
     const headH = unit * 0.42;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.fillStyle = "#0c0f18";
-    ctx.strokeStyle = "rgba(248, 113, 113, 0.85)";
+    ctx.strokeStyle = "rgba(248, 113, 113, 0.88)";
     ctx.lineWidth = 1.8;
 
     ctx.beginPath();
@@ -468,10 +483,10 @@ export class HudCanvas {
       : 0;
     const openFactor = Math.max(0.08, 1 - blinkAmt);
 
-    const pulse = 0.75 + 0.25 * Math.sin(now * 0.008);
+    const pulse = 0.78 + 0.22 * Math.sin(now * 0.008);
     ctx.fillStyle = `rgba(255, 50, 50, ${pulse})`;
     ctx.shadowColor = "#ff2a2a";
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 11;
 
     ctx.beginPath();
     ctx.moveTo(-eyeDx - eyeW * 0.5, eyeY);
@@ -501,9 +516,9 @@ export class HudCanvas {
 
     ctx.restore();
 
-    ctx.fillStyle = "rgba(252, 165, 165, 0.85)";
+    ctx.fillStyle = "rgba(252, 165, 165, 0.9)";
     ctx.font = "10px monospace";
-    ctx.fillText("CORE // VOID-09", rx + 10, ry + 18);
+    ctx.fillText(`CORE // VOID-09 // LVL ${this.upgradeStep}`, rx + 10, ry + 18);
 
     ctx.restore();
   }
@@ -553,6 +568,13 @@ export class HudCanvas {
       ctx.strokeStyle = "rgba(255, 75, 75, 0.95)";
       ctx.lineWidth = 1.6;
       ctx.strokeRect(leftBox, topBox, fw, fh);
+
+      // Extra Tier-2 outer lock frame at LVL 15+
+      if (this.upgradeStep >= 15) {
+        ctx.strokeStyle = "rgba(253, 224, 71, 0.72)";
+        ctx.lineWidth = 1.1;
+        ctx.strokeRect(leftBox - 5, topBox - 5, fw + 10, fh + 10);
+      }
 
       const leftEyeX = fx - fw * 0.22;
       const rightEyeX = fx + fw * 0.22;
@@ -708,7 +730,7 @@ export class HudCanvas {
     ctx.fillStyle = "rgba(252, 165, 165, 0.95)";
     ctx.font = "11px monospace";
     const sparkTag = this.sparkIntensity > 0.1 ? ` // ⚡ ${this.sparkReason}` : "";
-    ctx.fillText(`VOID-09 v${(1 + this.upgradeStep * 0.1).toFixed(1)} // ${this.state}${sparkTag}`, pad + 12, height - pad - 21);
+    ctx.fillText(`VOID-09 v${(1 + this.upgradeStep * 0.1).toFixed(1)} (LVL ${this.upgradeStep}) // ${this.state}${sparkTag}`, pad + 12, height - pad - 21);
     ctx.fillStyle = "rgba(248, 113, 113, 0.85)";
     ctx.font = "10px monospace";
     ctx.fillText(`${this.upgradeLog} | ${this.scannerStatus}`, pad + 12, height - pad - 8);
