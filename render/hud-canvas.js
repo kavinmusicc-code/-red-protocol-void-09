@@ -51,12 +51,14 @@ export class HudCanvas {
         candidates: [
           "http://127.0.0.1:8787/health",
           "http://localhost:8787/health",
-          "http://127.0.0.1:8787/status"
+          "http://127.0.0.1:8787/status",
+          "http://127.0.0.1:3000/health",
+          "http://127.0.0.1:8000/health"
         ],
         apiKey: "",
         required: true,
         autoDetected: false,
-        mode: "AGENT_LINK",
+        mode: "CLI_OR_APP",
         status: "REQUIRED"
       },
       mythos: {
@@ -395,7 +397,7 @@ export class HudCanvas {
     ].join(";");
 
     const reqBanner = document.createElement("div");
-    reqBanner.textContent = "REQUIRED: OLLAMA + OPENCLAW + MYTHOS (AUTO-DETECT ENABLED)";
+    reqBanner.textContent = "REQUIRED: OLLAMA + OPENCLAW + MYTHOS (CLI OR APP)";
     reqBanner.style.cssText = "color:#fca5a5;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid rgba(248,113,113,0.25);";
     drawer.appendChild(reqBanner);
 
