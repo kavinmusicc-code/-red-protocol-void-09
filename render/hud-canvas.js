@@ -16,7 +16,7 @@ export class HudCanvas {
     this.gazeX = 0;
     this.gazeY = 0;
     this.blinkProgress = 0;
-    this.nextBlinkAt = performance.now() + 2200;
+    this.nextBlinkAt = performance.now() + 2400;
     this.state = "IDLE";
     this.running = false;
     this.rafId = null;
@@ -53,13 +53,13 @@ export class HudCanvas {
 
   updateBlink(now) {
     if (now >= this.nextBlinkAt && this.blinkProgress === 0) {
-      this.blinkProgress = 0.05;
+      this.blinkProgress = 0.06;
     }
     if (this.blinkProgress > 0) {
       this.blinkProgress += 0.14;
       if (this.blinkProgress >= 2) {
         this.blinkProgress = 0;
-        this.nextBlinkAt = now + 2400 + Math.random() * 2600;
+        this.nextBlinkAt = now + 2600 + Math.random() * 2400;
       }
     }
   }
@@ -79,7 +79,9 @@ export class HudCanvas {
     const ctx = this.ctx;
     ctx.save();
     ctx.scale(dpr, dpr);
-    ctx.fillStyle = "#07090f";
+
+    // Deep HUD background
+    ctx.fillStyle = "#06080d";
     ctx.fillRect(0, 0, width, height);
 
     this.tick += 1;
@@ -96,44 +98,97 @@ export class HudCanvas {
     if (!this.loaded) {
       ctx.fillStyle = "#cfd8e3";
       ctx.font = "13px monospace";
-      ctx.fillText("LOADING ROBOT CORE (./Asset/robot-face.jpg)...", 20, 32);
+      ctx.fillText("INITIALIZING VOID-09 PERSONA...", 20, 32);
       ctx.restore();
       return;
     }
 
     const normX = Math.abs(this.gazeX) <= 1 && Math.abs(this.gazeY) <= 1 ? this.gazeX : (this.gazeX - 0.5) * 2;
     const normY = Math.abs(this.gazeY) <= 1 && Math.abs(this.gazeY) <= 1 ? this.gazeY : (this.gazeY - 0.5) * 2;
-    const offsetX = Math.max(-10, Math.min(10, normX * 8));
-    const offsetY = Math.max(-8, Math.min(8, normY * 6));
+    const lookX = Math.max(-18, Math.min(18, normX * 14));
+    const lookY = Math.max(-12, Math.min(12, normY * 10));
 
-    const padding = 4;
-    const availW = Math.max(1, width - padding * 2);
-    const availH = Math.max(1, height - padding * 2);
+    const imgW = this.img.naturalWidth || this.img.width;
+    const imgH = this.img.naturalHeight || this.img.height;
 
-    // Poora box left-to-right aur top-to-bottom fill karne ke liye stretch
-    const drawW = availW;
-    const drawH = availH;
-    const x = padding + offsetX * 0.35;
-    const y = padding + offsetY * 0.35;
+    // Aspect-ratio safe framing (no weird horizontal distortion)
+    const boxPad = 10;
+    const innerW = Math.max(1, width - boxPad * 2);
+    const innerH = Math.max(1, height - boxPad * 2);
+    const scale = Math.min(innerW / imgW, innerH / imgH) * 1.18;
+    const drawW = imgW * scale;
+    const drawH = imgH * scale;
+    const drawX = (width - drawW) / 2 + lookX * 0.7;
+    const drawY = boxPad + lookY * 0.5;
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(padding, padding, availW, availH);
+    ctx.rect(boxPad, boxPad, innerW, innerH);
     ctx.clip();
 
-    ctx.drawImage(this.img, x, y, drawW, drawH);
+    // Subtle ambient red aura behind persona
+    const aura = ctx.createRadialGradient(
+      width / 2 + lookX,
+      height * 0.42 + lookY,
+      10,
+      width / 2 + lookX,
+      height * 0.42 + lookY,
+      Math.max(width, height) * 0.55
+    );
+    aura.addColorStop(0, "rgba(220, 38, 38, 0.20)");
+    aura.addColorStop(1, "rgba(6, 8, 13, 0)");
+    ctx.fillStyle = aura;
+    ctx.fillRect(boxPad, boxPad, innerW, innerH);
 
-    // Sirf aankhon ke hisse par blink shutter
-    if (this.blinkProgress > 0) {
-      const factor = this.blinkProgress <= 1 ? this.blinkProgress : 2 - this.blinkProgress;
-      const eyeBandW = drawW * 0.14;
-      const eyeBandH = drawH * 0.05 * Math.min(1, factor);
-      const eyeCenterX = x + drawW * 0.5;
-      const eyeCenterY = y + drawH * 0.36;
+    // Draw portrait cleanly
+    ctx.drawImage(this.img, drawX, drawY, drawW, drawH);
 
-      ctx.fillStyle = "rgba(7, 9, 15, 0.95)";
-      ctx.fillRect(eyeCenterX - eyeBandW / 2, eyeCenterY - eyeBandH / 2, eyeBandW, eyeBandH);
+    // Smooth eye pulse / blink (soft visor pulse instead of harsh black box)
+    const blinkAmt = this.blinkProgress > 0
+      ? (this.blinkProgress <= 1 ? this.blinkProgress : 2 - this.blinkProgress)
+      : 0;
+
+    const eyeX = drawX + drawW * 0.5 + lookX * 0.25;
+    const eyeY = drawY + drawH * 0.34;
+    const eyeSpan = drawW * 0.22;
+
+    if (blinkAmt > 0) {
+      const shutterH = Math.max(2, drawH * 0.032 * blinkAmt);
+      ctx.fillStyle = `rgba(8, 10, 16, ${0.85 * blinkAmt})`;
+      ctx.fillRect(eyeX - eyeSpan * 0.5, eyeY - shutterH * 0.5, eyeSpan, shutterH);
+    } else {
+      const pulse = 0.25 + 0.15 * Math.sin(now * 0.005);
+      const glow = ctx.createRadialGradient(eyeX, eyeY, 2, eyeX, eyeY, eyeSpan * 0.7);
+      glow.addColorStop(0, `rgba(255, 65, 65, ${pulse})`);
+      glow.addColorStop(1, "rgba(255, 65, 65, 0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(eyeX - eyeSpan, eyeY - eyeSpan * 0.4, eyeSpan * 2, eyeSpan * 0.8);
     }
+
+    // Subtle scanline sweep
+    const scanY = boxPad + ((now * 0.045) % innerH);
+    ctx.fillStyle = "rgba(255, 70, 70, 0.07)";
+    ctx.fillRect(boxPad, scanY, innerW, 2);
+
+    // Corner HUD brackets
+    ctx.strokeStyle = "rgba(239, 68, 68, 0.55)";
+    ctx.lineWidth = 1.5;
+    const cLen = 14;
+
+    // Top-left & Top-right
+    ctx.beginPath();
+    ctx.moveTo(boxPad + 4, boxPad + 4 + cLen);
+    ctx.lineTo(boxPad + 4, boxPad + 4);
+    ctx.lineTo(boxPad + 4 + cLen, boxPad + 4);
+    ctx.moveTo(width - boxPad - 4 - cLen, boxPad + 4);
+    ctx.lineTo(width - boxPad - 4, boxPad + 4);
+    ctx.lineTo(width - boxPad - 4, boxPad + 4 + cLen);
+    ctx.stroke();
+
+    // Status tag
+    ctx.fillStyle = "rgba(248, 113, 113, 0.85)";
+    ctx.font = "11px monospace";
+    ctx.fillText(`VOID-09 // ${this.state}`, boxPad + 12, height - boxPad - 10);
 
     ctx.restore();
     ctx.restore();
