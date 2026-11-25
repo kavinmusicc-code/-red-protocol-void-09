@@ -11,11 +11,16 @@
   <div class="void-shell">
     <header class="void-header">
       <div class="void-title">RED PROTOCOL // VOID-09</div>
-      <div class="void-status" id="vault-status">KEY: LOCKED</div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <div class="void-status" id="vault-status">KEY: LOCKED</div>
+        <button type="button" class="btn-ghost" id="reopen-gate-btn">API KEY</button>
+      </div>
     </header>
 
-    <main class="void-main" id="void-stage">
-      <p>Phase 1 foundation initialized. Attach API key to unlock AI core.</p>
+    <main class="void-main" id="void-stage" style="display:grid;gap:20px;">
+      <section id="predator-stage-mount"></section>
+      <section id="command-deck-mount"></section>
+      <section id="bug-workbench-mount"></section>
     </main>
   </div>
 
@@ -49,24 +54,36 @@
 
   <script type="module">
     import { apiVault } from "./core/api-vault.js";
+    import { watchdog } from "./core/watchdog.js";
+    import { perfGovernor } from "./core/perf-governor.js";
     import { initApiGate } from "./ui/components/api-gate.js";
+    import { mountPredatorStage } from "./ui/views/predator-stage.js";
+    import { mountCommandDeck } from "./ui/components/command-deck.js";
+    import { mountBugWorkbench } from "./ui/components/bug-workbench.js";
+
+    watchdog.start();
+    perfGovernor.apply("lite");
 
     const statusEl = document.getElementById("vault-status");
-    const stageEl = document.getElementById("void-stage");
+    const reopenBtn = document.getElementById("reopen-gate-btn");
+
+    mountPredatorStage(document.getElementById("predator-stage-mount"));
+    mountCommandDeck(document.getElementById("command-deck-mount"));
+    mountBugWorkbench(document.getElementById("bug-workbench-mount"));
 
     function updateStatus(cfg) {
       if (!statusEl) return;
       if (cfg && cfg.apiKey) {
         statusEl.textContent = KEY:  ();
-        if (stageEl) {
-          stageEl.innerHTML = <p>VOID-09 unlocked in BYOK mode. Ready for multi-brain & bug-hunting modules.</p>;
-        }
       } else {
-        statusEl.textContent = "KEY: LOCKED";
+        statusEl.textContent = "KEY: LITE / LOCKED";
       }
     }
 
-    initApiGate(updateStatus);
+    const gate = initApiGate(updateStatus);
+    if (reopenBtn && gate) {
+      reopenBtn.addEventListener("click", () => gate.open());
+    }
   </script>
 </body>
 </html>
