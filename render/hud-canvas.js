@@ -44,6 +44,7 @@ export class HudCanvas {
     this.stream = null;
     this.detector = null;
     this.detectedFace = null;
+    this.smoothFace = { x: 0.5, y: 0.46, w: 0.24, h: 0.38 };
     this.lastScanAt = 0;
     this.motionCanvas = document.createElement("canvas");
     this.motionCanvas.width = 64;
@@ -146,7 +147,7 @@ export class HudCanvas {
     bar.style.cssText = [
       "position:absolute",
       "top:12px",
-      "left:14px",
+      "right:14px",
       "z-index:20",
       "display:inline-flex",
       "gap:6px",
@@ -223,7 +224,7 @@ export class HudCanvas {
 
   async _sampleSubject(now) {
     if (!this.scannerActive || !this.videoEl || this.videoEl.readyState < 2) return;
-    if (now - this.lastScanAt < 110) return;
+    if (now - this.lastScanAt < 120) return;
     this.lastScanAt = now;
 
     if (this.detector) {
@@ -236,18 +237,18 @@ export class HudCanvas {
           const nx = 1 - (b.x + b.width * 0.5) / vw;
           const ny = (b.y + b.height * 0.5) / vh;
           this.detectedFace = {
-            x: Math.max(0.12, Math.min(0.88, nx)),
-            y: Math.max(0.15, Math.min(0.85, ny)),
-            w: Math.max(0.14, Math.min(0.55, b.width / vw)),
-            h: Math.max(0.18, Math.min(0.65, b.height / vh))
+            x: Math.max(0.24, Math.min(0.76, nx)),
+            y: Math.max(0.24, Math.min(0.74, ny)),
+            w: Math.max(0.14, Math.min(0.38, b.width / vw)),
+            h: Math.max(0.18, Math.min(0.52, b.height / vh))
           };
           this.gazeX = (this.detectedFace.x - 0.5) * 2;
           this.gazeY = (this.detectedFace.y - 0.5) * 2;
-          this.scannerStatus = "FACE + EYES LOCKED // CONFIDENCE 98%";
+          this.scannerStatus = "FACE + EYES LOCKED // TRACKING ACTIVE";
           return;
         }
         this.detectedFace = null;
-        this.scannerStatus = "SCANNING LIVE FEED // ALIGN FACE IN FRAME";
+        this.scannerStatus = "SCANNING LIVE FEED // CENTER FACE IN FRAME";
         return;
       } catch {
         this.detector = null;
@@ -274,27 +275,36 @@ export class HudCanvas {
               Math.abs(frame[idx] - this.prevFrameData[idx]) +
               Math.abs(frame[idx + 1] - this.prevFrameData[idx + 1]) +
               Math.abs(frame[idx + 2] - this.prevFrameData[idx + 2]);
-            if (diff > 50) {
+            if (diff > 55) {
               sumX += x / mw;
               sumY += y / mh;
               hits++;
             }
           }
         }
-        if (hits > 18) {
-          const cx = Math.max(0.22, Math.min(0.78, sumX / hits));
-          const cy = Math.max(0.22, Math.min(0.78, sumY / hits));
-          this.detectedFace = { x: cx, y: cy, w: 0.28, h: 0.44 };
+        if (hits > 24) {
+          const cx = Math.max(0.28, Math.min(0.72, sumX / hits));
+          const cy = Math.max(0.28, Math.min(0.72, sumY / hits));
+          this.detectedFace = { x: cx, y: cy, w: 0.24, h: 0.38 };
           this.gazeX = (cx - 0.5) * 2;
           this.gazeY = (cy - 0.5) * 2;
-          this.scannerStatus = "SUBJECT LOCKED // LIVE OPTIC TRACKING";
+          this.scannerStatus = "SUBJECT LOCKED // OPTICAL MOTION TRACK";
         } else {
-          this.detectedFace = { x: 0.5, y: 0.48, w: 0.26, h: 0.42 };
-          this.scannerStatus = "LIVE FEED ACTIVE // BIOMETRIC RETICLE READY";
+          this.detectedFace = { x: 0.5, y: 0.46, w: 0.24, h: 0.38 };
+          this.scannerStatus = "LIVE FEED ACTIVE // BIOMETRIC RETICLE LOCKED";
         }
       }
       this.prevFrameData = new Uint8ClampedArray(frame);
     }
+  }
+
+  _updateSmoothFace() {
+    const target = this.detectedFace || { x: 0.5, y: 0.46, w: 0.24, h: 0.38 };
+    const t = 0.16;
+    this.smoothFace.x += (target.x - this.smoothFace.x) * t;
+    this.smoothFace.y += (target.y - this.smoothFace.y) * t;
+    this.smoothFace.w += (target.w - this.smoothFace.w) * t;
+    this.smoothFace.h += (target.h - this.smoothFace.h) * t;
   }
 
   _updateSelfEvolution(now) {
@@ -398,6 +408,7 @@ export class HudCanvas {
     this._updateSelfEvolution(now);
     this.updateBlink(now);
     this._sampleSubject(now);
+    this._updateSmoothFace();
     this._updateSparks();
 
     const shakeX = this.sparkIntensity > 0 ? (Math.random() - 0.5) * 9 * this.sparkIntensity : 0;
@@ -419,7 +430,6 @@ export class HudCanvas {
     const liveCamReady = this.scannerActive && this.videoEl && this.videoEl.readyState >= 2;
 
     if (liveCamReady) {
-      // Full uncropped mirrored camera feed centered cleanly in box
       const vw = this.videoEl.videoWidth || 640;
       const vh = this.videoEl.videoHeight || 360;
       const scale = Math.max(boxW / vw, boxH / vh);
@@ -445,7 +455,6 @@ export class HudCanvas {
       ctx.font = "13px monospace";
       ctx.fillText("INITIALIZING VOID-09 APEX CORE...", 20, 32);
     } else {
-      // Show full robot portrait cleanly inside box without cutting off face/eyes
       const imgW = this.img.naturalWidth || this.img.width;
       const imgH = this.img.naturalHeight || this.img.height;
       const scale = Math.min(boxW / imgW, boxH / imgH) * 1.15;
@@ -456,7 +465,6 @@ export class HudCanvas {
       const dx = pad + (boxW - dw) * 0.5 + normX * 10;
       const dy = pad + normY * 6;
 
-      // Ambient red core glow behind portrait
       const bgGlow = ctx.createRadialGradient(width * 0.5, height * 0.45, 12, width * 0.5, height * 0.45, Math.max(boxW, boxH) * 0.55);
       bgGlow.addColorStop(0, "rgba(220, 38, 38, 0.24)");
       bgGlow.addColorStop(1, "rgba(4, 5, 9, 0)");
@@ -465,7 +473,6 @@ export class HudCanvas {
 
       ctx.drawImage(this.img, dx, dy, dw, dh);
 
-      // Eye blink & glow aligned directly to portrait eyes
       const eyeCenterX = dx + dw * 0.5;
       const eyeCenterY = dy + dh * 0.35;
       const eyeSpan = dw * 0.24;
@@ -515,11 +522,16 @@ export class HudCanvas {
     ctx.fillRect(pad, beamY - 8, boxW, 16);
 
     if (liveCamReady) {
-      const face = this.detectedFace || { x: 0.5, y: 0.48, w: 0.26, h: 0.42 };
-      const fx = pad + face.x * boxW;
-      const fy = pad + face.y * boxH;
-      const fw = Math.max(70, face.w * boxW * 0.72);
-      const fh = Math.max(88, face.h * boxH * 0.72);
+      const sf = this.smoothFace;
+      const fw = Math.max(72, Math.min(boxW * 0.42, sf.w * boxW * 0.7));
+      const fh = Math.max(88, Math.min(boxH * 0.56, sf.h * boxH * 0.7));
+      const minCenterX = pad + 24 + fw * 0.5;
+      const maxCenterX = pad + boxW - 24 - fw * 0.5;
+      const minCenterY = pad + 34 + fh * 0.5;
+      const maxCenterY = pad + boxH - 46 - fh * 0.5;
+
+      const fx = Math.max(minCenterX, Math.min(maxCenterX, pad + sf.x * boxW));
+      const fy = Math.max(minCenterY, Math.min(maxCenterY, pad + sf.y * boxH));
       const leftBox = fx - fw * 0.5;
       const topBox = fy - fh * 0.5;
 
@@ -533,8 +545,8 @@ export class HudCanvas {
 
       ctx.strokeStyle = "rgba(254, 240, 138, 0.95)";
       ctx.lineWidth = 1.4;
-      ctx.strokeRect(leftEyeX - 12, scanEyeY - 7, 24, 14);
-      ctx.strokeRect(rightEyeX - 12, scanEyeY - 7, 24, 14);
+      ctx.strokeRect(leftEyeX - 11, scanEyeY - 6, 22, 12);
+      ctx.strokeRect(rightEyeX - 11, scanEyeY - 6, 22, 12);
 
       ctx.fillStyle = "#ff3b3b";
       ctx.beginPath();
@@ -544,7 +556,7 @@ export class HudCanvas {
 
       ctx.fillStyle = "rgba(254, 202, 202, 0.98)";
       ctx.font = "11px monospace";
-      ctx.fillText("LIVE SUBJECT // FACE + EYES LOCKED", leftBox, Math.max(pad + 44, topBox - 6));
+      ctx.fillText("FACE + EYES LOCKED", leftBox, topBox - 6);
     }
 
     if (this.sparkIntensity > 0.05) {
