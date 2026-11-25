@@ -6,7 +6,13 @@ export class LlmBridge {
     };
   }
 
-  async complete({ provider = "openai", apiKey = "", model = "", prompt = "", systemPrompt = "" }) {
+  async complete(opts) {
+    const provider = (opts && opts.provider) || "openai";
+    const apiKey = (opts && opts.apiKey) || "";
+    const model = (opts && opts.model) || "";
+    const prompt = (opts && opts.prompt) || "";
+    const systemPrompt = (opts && opts.systemPrompt) || "";
+
     if (!apiKey) {
       return {
         ok: false,
@@ -17,8 +23,9 @@ export class LlmBridge {
     if (provider === "gemini") {
       const targetModel = model || "gemini-2.5-flash";
       const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(targetModel) + ":generateContent?key=" + encodeURIComponent(apiKey);
+      const combinedText = systemPrompt ? (systemPrompt + "\n\n" + prompt) : prompt;
       const body = {
-        contents: [{ parts: [{ text: (systemPrompt ? systemPrompt + "\n\n" : "") + prompt }] }]
+        contents: [{ parts: [{ text: combinedText }] }]
       };
       const res = await fetch(url, {
         method: "POST",
@@ -27,9 +34,9 @@ export class LlmBridge {
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data?.error?.message || "Gemini request failed");
+        throw new Error((data && data.error && data.error.message) || "Gemini request failed");
       }
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const text = (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || "";
       return { ok: true, text: text, provider: "gemini", model: targetModel };
     }
 
@@ -50,10 +57,10 @@ export class LlmBridge {
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data?.error?.message || "LLM request failed");
+      throw new Error((data && data.error && data.error.message) || "LLM request failed");
     }
 
-    const text = data?.choices?.[0]?.message?.content || "";
+    const text = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
     return { ok: true, text: text, provider: provider, model: targetModel };
   }
 }

@@ -7,10 +7,16 @@ export class HudCanvas {
     this.tick = 0;
   }
 
+  clamp01(v) {
+    if (v < 0) return 0;
+    if (v > 1) return 1;
+    return v;
+  }
+
   setGaze(x, y) {
     if (typeof x === "number" && typeof y === "number") {
-      this.gaze.x = Math.max(0, Math.min(1, x));
-      this.gaze.y = Math.max(0, Math.min(1, y));
+      this.gaze.x = this.clamp01(x);
+      this.gaze.y = this.clamp01(y);
     }
   }
 

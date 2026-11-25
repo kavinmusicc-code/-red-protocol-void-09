@@ -10,14 +10,14 @@ export const phpRules = [
     id: "PHP-XSS-02",
     language: "php",
     severity: "medium",
-    pattern: /\becho\s+\(?:GET|POST|REQUEST|COOKIE)\b/i,
+    pattern: /\becho\s+\$_(GET|POST|REQUEST|COOKIE)\b/i,
     message: "Escape user-controlled superglobal output before rendering in HTML."
   },
   {
     id: "PHP-SQLI-03",
     language: "php",
     severity: "high",
-    pattern: /(?:mysqli_query|query)\s*\([^)]*\(?:GET|POST|REQUEST)\b/i,
+    pattern: /(mysqli_query|query)\s*\([^)]*\$_(GET|POST|REQUEST)\b/i,
     message: "Use parameterized prepared statements instead of direct superglobal concatenation."
   }
 ];
