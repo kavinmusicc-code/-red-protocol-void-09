@@ -13,24 +13,38 @@ export class HudCanvas {
       this.failed = true;
     };
     this.img.src = "./Asset/robot-face.jpg";
-    this.mouseX = 0.5;
-    this.mouseY = 0.5;
+    this.gazeX = 0;
+    this.gazeY = 0;
     this.blinkProgress = 0;
     this.nextBlinkAt = performance.now() + 2200;
     this.state = "IDLE";
+    this.running = false;
+    this.rafId = null;
     this.tick = 0;
-    this.bindEvents();
+  }
+
+  start() {
+    if (this.running) return;
+    this.running = true;
     this.loop();
   }
 
-  bindEvents() {
-    if (!this.canvas) return;
-    window.addEventListener("mousemove", (e) => {
-      const rect = this.canvas.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
-      this.mouseX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      this.mouseY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-    });
+  stop() {
+    this.running = false;
+    if (this.rafId) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+  }
+
+  setGaze(x, y) {
+    if (typeof x === "object" && x !== null) {
+      this.gazeX = Number(x.x ?? 0);
+      this.gazeY = Number(x.y ?? 0);
+      return;
+    }
+    this.gazeX = Number(x ?? 0);
+    this.gazeY = Number(y ?? 0);
   }
 
   setState(newState) {
@@ -50,7 +64,7 @@ export class HudCanvas {
     }
   }
 
-  draw(now) {
+  draw(now = performance.now()) {
     if (!this.canvas || !this.ctx) return;
     const dpr = window.devicePixelRatio || 1;
     const rect = this.canvas.getBoundingClientRect();
@@ -96,8 +110,11 @@ export class HudCanvas {
     const drawW = imgW * scale;
     const drawH = imgH * scale;
 
-    const offsetX = (this.mouseX - 0.5) * 14;
-    const offsetY = (this.mouseY - 0.5) * 10;
+    const normX = Math.abs(this.gazeX) <= 1 && Math.abs(this.gazeY) <= 1 ? this.gazeX : (this.gazeX - 0.5) * 2;
+    const normY = Math.abs(this.gazeY) <= 1 && Math.abs(this.gazeY) <= 1 ? this.gazeY : (this.gazeY - 0.5) * 2;
+    const offsetX = Math.max(-14, Math.min(14, normX * 10));
+    const offsetY = Math.max(-10, Math.min(10, normY * 8));
+
     const x = (width - drawW) / 2 + offsetX;
     const y = (height - drawH) / 2 + offsetY;
 
@@ -114,10 +131,11 @@ export class HudCanvas {
 
   loop() {
     const frame = (now) => {
+      if (!this.running) return;
       this.draw(now);
-      requestAnimationFrame(frame);
+      this.rafId = requestAnimationFrame(frame);
     };
-    requestAnimationFrame(frame);
+    this.rafId = requestAnimationFrame(frame);
   }
 }
 
