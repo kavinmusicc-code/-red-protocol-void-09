@@ -3,42 +3,35 @@
     this.listeners = new Map();
   }
 
-  on(event, handler) {
-    if (typeof handler !== "function") return () => {};
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
+  on(eventName, handler) {
+    if (typeof eventName !== "string" || typeof handler !== "function") {
+      return () => {};
     }
-    const set = this.listeners.get(event);
+    if (!this.listeners.has(eventName)) {
+      this.listeners.set(eventName, new Set());
+    }
+    const set = this.listeners.get(eventName);
     set.add(handler);
-    return () => this.off(event, handler);
+    return () => this.off(eventName, handler);
   }
 
-  once(event, handler) {
-    if (typeof handler !== "function") return () => {};
-    const wrapper = (payload) => {
-      this.off(event, wrapper);
-      handler(payload);
-    };
-    return this.on(event, wrapper);
-  }
-
-  off(event, handler) {
-    const set = this.listeners.get(event);
+  off(eventName, handler) {
+    const set = this.listeners.get(eventName);
     if (!set) return;
     set.delete(handler);
     if (set.size === 0) {
-      this.listeners.delete(event);
+      this.listeners.delete(eventName);
     }
   }
 
-  emit(event, payload = {}) {
-    const set = this.listeners.get(event);
+  emit(eventName, payload) {
+    const set = this.listeners.get(eventName);
     if (!set || set.size === 0) return;
-    for (const handler of [...set]) {
+    for (const handler of Array.from(set)) {
       try {
         handler(payload);
       } catch (err) {
-        console.error([EventBus:] handler error:, err);
+        console.error("[EventBus error in " + eventName + "]:", err);
       }
     }
   }
@@ -49,3 +42,4 @@
 }
 
 export const eventBus = new EventBus();
+export default eventBus;

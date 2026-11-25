@@ -14,11 +14,11 @@ export class ApiVault {
   load() {
     try {
       if (typeof localStorage === "undefined") {
-        return { ...DEFAULT_CONFIG };
+        return Object.assign({}, DEFAULT_CONFIG);
       }
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) {
-        return { ...DEFAULT_CONFIG };
+        return Object.assign({}, DEFAULT_CONFIG);
       }
       const parsed = JSON.parse(raw);
       return {
@@ -29,18 +29,19 @@ export class ApiVault {
         apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey.trim() : ""
       };
     } catch (_) {
-      return { ...DEFAULT_CONFIG };
+      return Object.assign({}, DEFAULT_CONFIG);
     }
   }
 
-  save(nextCfg = {}) {
+  save(nextCfg) {
+    const cfg = nextCfg || {};
     const current = this.load();
     const updated = {
-      provider: typeof nextCfg.provider === "string" && nextCfg.provider.trim()
-        ? nextCfg.provider.trim()
+      provider: typeof cfg.provider === "string" && cfg.provider.trim()
+        ? cfg.provider.trim()
         : current.provider,
-      model: typeof nextCfg.model === "string" ? nextCfg.model.trim() : current.model,
-      apiKey: typeof nextCfg.apiKey === "string" ? nextCfg.apiKey.trim() : current.apiKey
+      model: typeof cfg.model === "string" ? cfg.model.trim() : current.model,
+      apiKey: typeof cfg.apiKey === "string" ? cfg.apiKey.trim() : current.apiKey
     };
 
     this.config = updated;
@@ -50,21 +51,21 @@ export class ApiVault {
       }
     } catch (_) {}
 
-    return { ...updated };
+    return Object.assign({}, updated);
   }
 
   clear() {
-    this.config = { ...DEFAULT_CONFIG };
+    this.config = Object.assign({}, DEFAULT_CONFIG);
     try {
       if (typeof localStorage !== "undefined") {
         localStorage.removeItem(STORAGE_KEY);
       }
     } catch (_) {}
-    return { ...this.config };
+    return Object.assign({}, this.config);
   }
 
   getConfig() {
-    return { ...this.load() };
+    return Object.assign({}, this.load());
   }
 
   hasKey() {
@@ -75,7 +76,7 @@ export class ApiVault {
     const key = this.load().apiKey;
     if (!key) return "NONE";
     if (key.length <= 8) return "****";
-    return `${key.slice(0, 4)}...${key.slice(-4)}`;
+    return key.slice(0, 4) + "..." + key.slice(-4);
   }
 }
 
