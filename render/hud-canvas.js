@@ -11,7 +11,6 @@ export class HudCanvas {
     };
     this.img.onerror = () => {
       this.failed = true;
-      this.triggerSpark("ASSET_LOAD_ERROR", 1.25);
     };
     this.img.src = "./Asset/robot-face.jpg";
 
@@ -397,71 +396,106 @@ export class HudCanvas {
     ctx.fillStyle = "#05070d";
     ctx.fillRect(rx, ry, rw, rh);
 
-    if (this.failed) {
-      ctx.fillStyle = "#ff4d4d";
-      ctx.font = "12px monospace";
-      ctx.fillText("ERROR LOADING ./Asset/robot-face.jpg", rx + 14, ry + 28);
-      ctx.restore();
-      return;
-    }
-
-    if (!this.loaded) {
-      ctx.fillStyle = "#f87171";
-      ctx.font = "12px monospace";
-      ctx.fillText("BOOTING ROBOT CORE...", rx + 14, ry + 28);
-      ctx.restore();
-      return;
-    }
-
-    const imgW = this.img.naturalWidth || this.img.width;
-    const imgH = this.img.naturalHeight || this.img.height;
-    const scale = Math.min(rw / imgW, rh / imgH) * 1.12;
-    const dw = imgW * scale;
-    const dh = imgH * scale;
     const normX = Math.max(-1, Math.min(1, this.gazeX));
     const normY = Math.max(-1, Math.min(1, this.gazeY));
-    const dx = rx + (rw - dw) * 0.5 + normX * 8;
-    const dy = ry + normY * 5;
+    const cx = rx + rw * 0.5 + normX * 10;
+    const cy = ry + rh * 0.46 + normY * 7;
+    const unit = Math.min(rw, rh);
 
-    const glowBg = ctx.createRadialGradient(rx + rw * 0.5, ry + rh * 0.42, 10, rx + rw * 0.5, ry + rh * 0.42, Math.max(rw, rh) * 0.55);
-    glowBg.addColorStop(0, "rgba(220, 38, 38, 0.24)");
-    glowBg.addColorStop(1, "rgba(5, 7, 13, 0)");
-    ctx.fillStyle = glowBg;
+    // Crimson ambient aura
+    const aura = ctx.createRadialGradient(cx, cy - unit * 0.04, unit * 0.04, cx, cy, unit * 0.52);
+    aura.addColorStop(0, "rgba(239, 68, 68, 0.30)");
+    aura.addColorStop(0.6, "rgba(153, 27, 27, 0.10)");
+    aura.addColorStop(1, "rgba(5, 7, 13, 0)");
+    ctx.fillStyle = aura;
     ctx.fillRect(rx, ry, rw, rh);
 
-    ctx.drawImage(this.img, dx, dy, dw, dh);
+    // Outer tactical halo ring
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((now * 0.001) % (Math.PI * 2));
+    ctx.strokeStyle = "rgba(248, 113, 113, 0.35)";
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash([12, 8]);
+    ctx.beginPath();
+    ctx.arc(0, 0, unit * 0.34, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
 
-    const eyeCenterX = dx + dw * 0.5;
-    const eyeCenterY = dy + dh * 0.35;
-    const eyeSpan = dw * 0.24;
+    // Sharp cybernetic mask / skull-visor silhouette
+    const headW = unit * 0.34;
+    const headH = unit * 0.42;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = "#0c0f18";
+    ctx.strokeStyle = "rgba(248, 113, 113, 0.85)";
+    ctx.lineWidth = 1.8;
 
+    ctx.beginPath();
+    ctx.moveTo(0, -headH * 0.62);
+    ctx.lineTo(headW * 0.58, -headH * 0.25);
+    ctx.lineTo(headW * 0.46, headH * 0.22);
+    ctx.lineTo(headW * 0.22, headH * 0.58);
+    ctx.lineTo(-headW * 0.22, headH * 0.58);
+    ctx.lineTo(-headW * 0.46, headH * 0.22);
+    ctx.lineTo(-headW * 0.58, -headH * 0.25);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Armored brow & cheek plates
+    ctx.strokeStyle = "rgba(239, 68, 68, 0.55)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(-headW * 0.44, -headH * 0.14);
+    ctx.lineTo(0, -headH * 0.02);
+    ctx.lineTo(headW * 0.44, -headH * 0.14);
+    ctx.stroke();
+
+    // Glowing cyber eyes + blink shutter
+    const eyeY = -headH * 0.04;
+    const eyeDx = headW * 0.24;
+    const eyeW = headW * 0.18;
+    const eyeH = headH * 0.08;
     const blinkAmt = this.blinkProgress > 0
       ? (this.blinkProgress <= 1 ? this.blinkProgress : 2 - this.blinkProgress)
       : 0;
+    const openFactor = Math.max(0.08, 1 - blinkAmt);
 
-    if (blinkAmt > 0) {
-      const lidH = Math.max(3, dh * 0.045 * blinkAmt);
-      ctx.fillStyle = `rgba(5, 6, 11, ${0.95 * blinkAmt})`;
-      ctx.fillRect(eyeCenterX - eyeSpan * 0.5, eyeCenterY - lidH * 0.5, eyeSpan, lidH);
-    } else {
-      const pulse = 0.28 + 0.16 * Math.sin(now * 0.008);
-      const glow = ctx.createRadialGradient(eyeCenterX, eyeCenterY, 2, eyeCenterX, eyeCenterY, eyeSpan * 0.75);
-      glow.addColorStop(0, `rgba(255, 42, 42, ${pulse})`);
-      glow.addColorStop(1, "rgba(255, 42, 42, 0)");
-      ctx.fillStyle = glow;
-      ctx.fillRect(eyeCenterX - eyeSpan, eyeCenterY - eyeSpan * 0.45, eyeSpan * 2, eyeSpan * 0.9);
+    const pulse = 0.75 + 0.25 * Math.sin(now * 0.008);
+    ctx.fillStyle = `rgba(255, 50, 50, ${pulse})`;
+    ctx.shadowColor = "#ff2a2a";
+    ctx.shadowBlur = 10;
+
+    // Left eye slit
+    ctx.beginPath();
+    ctx.moveTo(-eyeDx - eyeW * 0.5, eyeY);
+    ctx.lineTo(-eyeDx + eyeW * 0.5, eyeY - eyeH * 0.5 * openFactor);
+    ctx.lineTo(-eyeDx + eyeW * 0.35, eyeY + eyeH * 0.5 * openFactor);
+    ctx.closePath();
+    ctx.fill();
+
+    // Right eye slit
+    ctx.beginPath();
+    ctx.moveTo(eyeDx + eyeW * 0.5, eyeY);
+    ctx.lineTo(eyeDx - eyeW * 0.5, eyeY - eyeH * 0.5 * openFactor);
+    ctx.lineTo(eyeDx - eyeW * 0.35, eyeY + eyeH * 0.5 * openFactor);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Lower respirator grille lines
+    ctx.strokeStyle = "rgba(252, 165, 165, 0.45)";
+    ctx.lineWidth = 1.2;
+    for (let g = 0; g < 3; g++) {
+      const gy = headH * (0.24 + g * 0.09);
+      const gw = headW * (0.22 - g * 0.03);
+      ctx.beginPath();
+      ctx.moveTo(-gw, gy);
+      ctx.lineTo(gw, gy);
+      ctx.stroke();
     }
 
-    // Rotating optic ring on robot
-    ctx.save();
-    ctx.translate(eyeCenterX, eyeCenterY);
-    ctx.rotate((now * 0.0012) % (Math.PI * 2));
-    ctx.strokeStyle = "rgba(248, 113, 113, 0.35)";
-    ctx.lineWidth = 1.2;
-    ctx.setLineDash([9, 7]);
-    ctx.beginPath();
-    ctx.arc(0, 0, Math.min(rw, rh) * 0.20, 0, Math.PI * 2);
-    ctx.stroke();
     ctx.restore();
 
     ctx.fillStyle = "rgba(252, 165, 165, 0.85)";
@@ -500,7 +534,6 @@ export class HudCanvas {
       ctx.fillStyle = "rgba(185, 28, 28, 0.08)";
       ctx.fillRect(cx, cy, cw, ch);
 
-      // Face + Eyes lock reticle inside right camera pane
       const sf = this.smoothFace;
       const fw = Math.max(64, Math.min(cw * 0.52, sf.w * cw * 0.82));
       const fh = Math.max(78, Math.min(ch * 0.64, sf.h * ch * 0.82));
@@ -547,7 +580,6 @@ export class HudCanvas {
       ctx.fillText("CLICK [SCAN FACE & EYES]", cx + 18, cy + ch * 0.48 + 16);
     }
 
-    // Subtle scan beam inside camera pane
     const beamY = cy + ((now * 0.08) % Math.max(1, ch));
     ctx.fillStyle = "rgba(255, 75, 75, 0.20)";
     ctx.fillRect(cx, beamY, cw, 2);
@@ -601,7 +633,6 @@ export class HudCanvas {
       this._drawRobotPane(ctx, now, pad, pad, paneW, paneH);
       this._drawCameraPane(ctx, now, pad + paneW + gap, pad, boxW - paneW - gap, paneH);
 
-      // Divider line between robot & camera panes
       ctx.strokeStyle = "rgba(248, 113, 113, 0.55)";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -614,7 +645,6 @@ export class HudCanvas {
       this._drawCameraPane(ctx, now, pad, pad + paneH + gap, boxW, boxH - paneH - gap);
     }
 
-    // Error Sparks & Lightning Arcs
     if (this.sparkIntensity > 0.05) {
       ctx.fillStyle = `rgba(255, 60, 30, ${Math.min(0.22, this.sparkIntensity * 0.16)})`;
       ctx.fillRect(pad, pad, boxW, boxH);
@@ -648,7 +678,6 @@ export class HudCanvas {
       ctx.restore();
     }
 
-    // Outer HUD corner brackets
     const bLen = 18;
     ctx.strokeStyle = this.sparkIntensity > 0.2 ? "rgba(253, 224, 71, 0.95)" : "rgba(248, 113, 113, 0.92)";
     ctx.lineWidth = 2;
@@ -670,8 +699,9 @@ export class HudCanvas {
     ctx.lineTo(width - pad - 4, height - pad - 4 - bLen);
     ctx.stroke();
 
-    // Bottom telemetry bar
-    ctx.fillStyle = "rgba(4, 6, 12, 0.78)";
+    ctx.fillStyle = "rgba(252, 165, 165, 0.78)";
+    ctx.fillRect(pad + 4, height - pad - 34, boxW - 8, 30);
+    ctx.fillStyle = "rgba(4, 6, 12, 0.85)";
     ctx.fillRect(pad + 4, height - pad - 34, boxW - 8, 30);
 
     ctx.fillStyle = "rgba(252, 165, 165, 0.95)";
