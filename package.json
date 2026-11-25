@@ -1,0 +1,40 @@
+{
+  "name": "void-09-desktop",
+  "version": "1.0.0",
+  "description": "VOID-09 HUD Desktop Application for Windows, Apple (macOS) and Linux",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win --x64",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.void09.hud",
+    "productName": "VOID-09",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "render/**/*",
+      "Asset/**/*"
+    ],
+    "win": {
+      "target": ["nsis", "zip"]
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": ["AppImage", "tar.gz"],
+      "category": "Utility"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}
