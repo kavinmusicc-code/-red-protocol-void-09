@@ -1394,3 +1394,14 @@ if (this.rafId) {
 }
 
 export default HudCanvas;
+// VOID-09 Devil Humanoid HUD auto-mount
+window.addEventListener("DOMContentLoaded", () => {
+  const host =
+    document.querySelector("[data-devil-avatar]") ||
+    document.querySelector(".hud-avatar, .avatar-box, .predator-avatar, #hud-avatar") ||
+    document.querySelector("canvas")?.parentElement ||
+    null;
+  if (host) {
+    window.__void09DevilAvatar = mountDevilAvatar(host, "IDLE");
+  }
+});
