@@ -39,7 +39,7 @@ export class HudCanvas {
 
     // Live Face & Eye Scanner state
     this.scannerActive = false;
-    this.scannerStatus = "STANDBY // CLICK [SCAN FACE & EYES] FOR LIVE CAM";
+    this.scannerStatus = "STANDBY // CLICK [SCAN FACE & EYES]";
     this.videoEl = null;
     this.stream = null;
     this.detector = null;
@@ -133,7 +133,8 @@ export class HudCanvas {
 
   _createScannerControls() {
     if (!this.canvas || !this.canvas.parentElement) return;
-    if (this.canvas.parentElement.querySelector(".void09-scanner-bar")) return;
+    const old = document.querySelectorAll(".void09-scanner-bar");
+    old.forEach((el) => el.remove());
 
     const parent = this.canvas.parentElement;
     if (getComputedStyle(parent).position === "static") {
@@ -144,10 +145,10 @@ export class HudCanvas {
     bar.className = "void09-scanner-bar";
     bar.style.cssText = [
       "position:absolute",
-      "top:10px",
-      "right:12px",
-      "z-index:10",
-      "display:flex",
+      "top:12px",
+      "left:14px",
+      "z-index:20",
+      "display:inline-flex",
       "gap:6px",
       "align-items:center",
       "font-family:monospace",
@@ -160,7 +161,7 @@ export class HudCanvas {
     btn.style.cssText = [
       "background:rgba(185,28,28,0.92)",
       "color:#fff",
-      "border:1px solid rgba(254,202,202,0.6)",
+      "border:1px solid rgba(254,202,202,0.7)",
       "padding:5px 10px",
       "cursor:pointer",
       "letter-spacing:0.6px",
@@ -212,7 +213,7 @@ export class HudCanvas {
   stopScanner() {
     this.scannerActive = false;
     this.detectedFace = null;
-    this.scannerStatus = "STANDBY // CLICK [SCAN FACE & EYES] FOR LIVE CAM";
+    this.scannerStatus = "STANDBY // CLICK [SCAN FACE & EYES]";
     if (this.stream) {
       this.stream.getTracks().forEach((t) => t.stop());
       this.stream = null;
@@ -232,18 +233,17 @@ export class HudCanvas {
         const vh = this.videoEl.videoHeight || 360;
         if (faces && faces.length > 0) {
           const b = faces[0].boundingBox;
-          // Mirror X so it matches the mirrored live camera preview
           const nx = 1 - (b.x + b.width * 0.5) / vw;
           const ny = (b.y + b.height * 0.5) / vh;
           this.detectedFace = {
-            x: Math.max(0.08, Math.min(0.92, nx)),
-            y: Math.max(0.10, Math.min(0.90, ny)),
-            w: Math.max(0.12, Math.min(0.65, b.width / vw)),
-            h: Math.max(0.16, Math.min(0.75, b.height / vh))
+            x: Math.max(0.12, Math.min(0.88, nx)),
+            y: Math.max(0.15, Math.min(0.85, ny)),
+            w: Math.max(0.14, Math.min(0.55, b.width / vw)),
+            h: Math.max(0.18, Math.min(0.65, b.height / vh))
           };
           this.gazeX = (this.detectedFace.x - 0.5) * 2;
           this.gazeY = (this.detectedFace.y - 0.5) * 2;
-          this.scannerStatus = `FACE + EYES LOCKED // CONFIDENCE 98%`;
+          this.scannerStatus = "FACE + EYES LOCKED // CONFIDENCE 98%";
           return;
         }
         this.detectedFace = null;
@@ -254,7 +254,6 @@ export class HudCanvas {
       }
     }
 
-    // Fallback presence box centered on subject if FaceDetector is unavailable
     if (this.motionCtx) {
       const mw = this.motionCanvas.width;
       const mh = this.motionCanvas.height;
@@ -283,15 +282,14 @@ export class HudCanvas {
           }
         }
         if (hits > 18) {
-          const cx = Math.max(0.2, Math.min(0.8, sumX / hits));
-          const cy = Math.max(0.2, Math.min(0.8, sumY / hits));
-          this.detectedFace = { x: cx, y: cy, w: 0.30, h: 0.46 };
+          const cx = Math.max(0.22, Math.min(0.78, sumX / hits));
+          const cy = Math.max(0.22, Math.min(0.78, sumY / hits));
+          this.detectedFace = { x: cx, y: cy, w: 0.28, h: 0.44 };
           this.gazeX = (cx - 0.5) * 2;
           this.gazeY = (cy - 0.5) * 2;
           this.scannerStatus = "SUBJECT LOCKED // LIVE OPTIC TRACKING";
         } else {
-          // Keep default central biometric lock box so user still sees face/eye reticle on live feed
-          this.detectedFace = { x: 0.5, y: 0.45, w: 0.28, h: 0.44 };
+          this.detectedFace = { x: 0.5, y: 0.48, w: 0.26, h: 0.42 };
           this.scannerStatus = "LIVE FEED ACTIVE // BIOMETRIC RETICLE READY";
         }
       }
@@ -380,41 +378,9 @@ export class HudCanvas {
     }
   }
 
-  _drawCoverMedia(ctx, source, srcW, srcH, pad, boxW, boxH, mirror = false, offsetX = 0, offsetY = 0, zoom = 1.0) {
-    const targetAspect = boxW / boxH;
-    const srcAspect = srcW / srcH;
-
-    let sx = 0;
-    let sy = 0;
-    let sWidth = srcW;
-    let sHeight = srcH;
-
-    if (srcAspect > targetAspect) {
-      sWidth = srcH * targetAspect;
-      sx = (srcW - sWidth) * 0.5;
-    } else {
-      sHeight = srcW / targetAspect;
-      sy = Math.max(0, srcH * 0.06);
-      if (sy + sHeight > srcH) sy = Math.max(0, srcH - sHeight);
-    }
-
-    const zW = sWidth / zoom;
-    const zH = sHeight / zoom;
-    sx = Math.max(0, Math.min(srcW - zW, sx + (sWidth - zW) * 0.5 + offsetX));
-    sy = Math.max(0, Math.min(srcH - zH, sy + (sHeight - zH) * 0.36 + offsetY));
-
-    ctx.save();
-    if (mirror) {
-      ctx.translate(pad * 2 + boxW, 0);
-      ctx.scale(-1, 1);
-    }
-    ctx.drawImage(source, sx, sy, zW, zH, pad, pad, boxW, boxH);
-    ctx.restore();
-  }
-
   draw(now = performance.now()) {
     if (!this.canvas || !this.ctx) return;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const rect = this.canvas.getBoundingClientRect();
     const width = Math.max(300, Math.floor(rect.width || this.canvas.clientWidth || 640));
     const height = Math.max(180, Math.floor(rect.height || this.canvas.clientHeight || 320));
@@ -453,13 +419,22 @@ export class HudCanvas {
     const liveCamReady = this.scannerActive && this.videoEl && this.videoEl.readyState >= 2;
 
     if (liveCamReady) {
-      // Draw user's LIVE mirrored face feed inside the HUD box!
+      // Full uncropped mirrored camera feed centered cleanly in box
       const vw = this.videoEl.videoWidth || 640;
       const vh = this.videoEl.videoHeight || 360;
-      this._drawCoverMedia(ctx, this.videoEl, vw, vh, pad, boxW, boxH, true, 0, 0, 1.0);
+      const scale = Math.max(boxW / vw, boxH / vh);
+      const dw = vw * scale;
+      const dh = vh * scale;
+      const dx = pad + (boxW - dw) * 0.5;
+      const dy = pad + (boxH - dh) * 0.5;
 
-      // Subtle tactical crimson HUD tint over live camera
-      ctx.fillStyle = "rgba(185, 28, 28, 0.10)";
+      ctx.save();
+      ctx.translate(pad * 2 + boxW, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(this.videoEl, dx, dy, dw, dh);
+      ctx.restore();
+
+      ctx.fillStyle = "rgba(185, 28, 28, 0.08)";
       ctx.fillRect(pad, pad, boxW, boxH);
     } else if (this.failed) {
       ctx.fillStyle = "#ff4d4d";
@@ -470,16 +445,51 @@ export class HudCanvas {
       ctx.font = "13px monospace";
       ctx.fillText("INITIALIZING VOID-09 APEX CORE...", 20, 32);
     } else {
-      const normX = Math.max(-1, Math.min(1, this.gazeX));
-      const normY = Math.max(-1, Math.min(1, this.gazeY));
+      // Show full robot portrait cleanly inside box without cutting off face/eyes
       const imgW = this.img.naturalWidth || this.img.width;
       const imgH = this.img.naturalHeight || this.img.height;
-      const evoZoom = 1.06 + Math.min(0.14, (this.upgradeStep % 12) * 0.01);
-      this._drawCoverMedia(ctx, this.img, imgW, imgH, pad, boxW, boxH, false, normX * 22, normY * 14, evoZoom);
+      const scale = Math.min(boxW / imgW, boxH / imgH) * 1.15;
+      const dw = imgW * scale;
+      const dh = imgH * scale;
+      const normX = Math.max(-1, Math.min(1, this.gazeX));
+      const normY = Math.max(-1, Math.min(1, this.gazeY));
+      const dx = pad + (boxW - dw) * 0.5 + normX * 10;
+      const dy = pad + normY * 6;
+
+      // Ambient red core glow behind portrait
+      const bgGlow = ctx.createRadialGradient(width * 0.5, height * 0.45, 12, width * 0.5, height * 0.45, Math.max(boxW, boxH) * 0.55);
+      bgGlow.addColorStop(0, "rgba(220, 38, 38, 0.24)");
+      bgGlow.addColorStop(1, "rgba(4, 5, 9, 0)");
+      ctx.fillStyle = bgGlow;
+      ctx.fillRect(pad, pad, boxW, boxH);
+
+      ctx.drawImage(this.img, dx, dy, dw, dh);
+
+      // Eye blink & glow aligned directly to portrait eyes
+      const eyeCenterX = dx + dw * 0.5;
+      const eyeCenterY = dy + dh * 0.35;
+      const eyeSpan = dw * 0.24;
+
+      const blinkAmt = this.blinkProgress > 0
+        ? (this.blinkProgress <= 1 ? this.blinkProgress : 2 - this.blinkProgress)
+        : 0;
+
+      if (blinkAmt > 0) {
+        const lidH = Math.max(3, dh * 0.045 * blinkAmt);
+        ctx.fillStyle = `rgba(5, 6, 11, ${0.95 * blinkAmt})`;
+        ctx.fillRect(eyeCenterX - eyeSpan * 0.5, eyeCenterY - lidH * 0.5, eyeSpan, lidH);
+      } else {
+        const pulse = 0.28 + 0.16 * Math.sin(now * 0.008);
+        const glow = ctx.createRadialGradient(eyeCenterX, eyeCenterY, 2, eyeCenterX, eyeCenterY, eyeSpan * 0.75);
+        glow.addColorStop(0, `rgba(255, 42, 42, ${pulse})`);
+        glow.addColorStop(1, "rgba(255, 42, 42, 0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(eyeCenterX - eyeSpan, eyeCenterY - eyeSpan * 0.45, eyeSpan * 2, eyeSpan * 0.9);
+      }
     }
 
     // Tactical HUD Grid
-    ctx.strokeStyle = "rgba(239, 68, 68, 0.09)";
+    ctx.strokeStyle = "rgba(239, 68, 68, 0.08)";
     ctx.lineWidth = 1;
     const stepGrid = 28;
     for (let gx = pad; gx < pad + boxW; gx += stepGrid) {
@@ -495,46 +505,28 @@ export class HudCanvas {
       ctx.stroke();
     }
 
-    // Dark crimson edge vignette
-    const vig = ctx.createRadialGradient(
-      width * 0.5,
-      height * 0.45,
-      Math.min(boxW, boxH) * 0.22,
-      width * 0.5,
-      height * 0.5,
-      Math.max(boxW, boxH) * 0.76
-    );
-    vig.addColorStop(0, "rgba(220, 38, 38, 0.04)");
-    vig.addColorStop(0.72, "rgba(10, 4, 8, 0.22)");
-    vig.addColorStop(1, "rgba(3, 4, 8, 0.78)");
-    ctx.fillStyle = vig;
-    ctx.fillRect(pad, pad, boxW, boxH);
-
     // Sweeping laser scan beam
-    const beamY = pad + ((now * 0.085) % boxH);
-    const beamGrad = ctx.createLinearGradient(0, beamY - 9, 0, beamY + 9);
+    const beamY = pad + ((now * 0.08) % boxH);
+    const beamGrad = ctx.createLinearGradient(0, beamY - 8, 0, beamY + 8);
     beamGrad.addColorStop(0, "rgba(239, 68, 68, 0)");
-    beamGrad.addColorStop(0.5, "rgba(255, 75, 75, 0.38)");
+    beamGrad.addColorStop(0.5, "rgba(255, 75, 75, 0.34)");
     beamGrad.addColorStop(1, "rgba(239, 68, 68, 0)");
     ctx.fillStyle = beamGrad;
-    ctx.fillRect(pad, beamY - 9, boxW, 18);
+    ctx.fillRect(pad, beamY - 8, boxW, 16);
 
-    // When live camera is active, draw Face + Both Eyes biometric scanner reticle over user's face!
     if (liveCamReady) {
-      const face = this.detectedFace || { x: 0.5, y: 0.45, w: 0.28, h: 0.44 };
+      const face = this.detectedFace || { x: 0.5, y: 0.48, w: 0.26, h: 0.42 };
       const fx = pad + face.x * boxW;
       const fy = pad + face.y * boxH;
-      const fw = Math.max(70, face.w * boxW * 0.75);
-      const fh = Math.max(90, face.h * boxH * 0.75);
+      const fw = Math.max(70, face.w * boxW * 0.72);
+      const fh = Math.max(88, face.h * boxH * 0.72);
       const leftBox = fx - fw * 0.5;
       const topBox = fy - fh * 0.5;
 
-      // Outer face target brackets
       ctx.strokeStyle = "rgba(255, 75, 75, 0.95)";
       ctx.lineWidth = 1.8;
       ctx.strokeRect(leftBox, topBox, fw, fh);
 
-      // Left & Right Eye lock reticles
       const leftEyeX = fx - fw * 0.22;
       const rightEyeX = fx + fw * 0.22;
       const scanEyeY = fy - fh * 0.12;
@@ -544,7 +536,6 @@ export class HudCanvas {
       ctx.strokeRect(leftEyeX - 12, scanEyeY - 7, 24, 14);
       ctx.strokeRect(rightEyeX - 12, scanEyeY - 7, 24, 14);
 
-      // Crosshair dots on pupils
       ctx.fillStyle = "#ff3b3b";
       ctx.beginPath();
       ctx.arc(leftEyeX, scanEyeY, 2.2, 0, Math.PI * 2);
@@ -553,46 +544,9 @@ export class HudCanvas {
 
       ctx.fillStyle = "rgba(254, 202, 202, 0.98)";
       ctx.font = "11px monospace";
-      ctx.fillText("LIVE SUBJECT // FACE + EYES LOCKED", leftBox, Math.max(pad + 14, topBox - 6));
-    } else if (this.loaded && !this.failed) {
-      // Robot core optic blink + rotating target ring when in standby mode
-      const normX = Math.max(-1, Math.min(1, this.gazeX));
-      const normY = Math.max(-1, Math.min(1, this.gazeY));
-      const eyeCenterX = width * 0.5 + normX * 10;
-      const eyeCenterY = pad + boxH * 0.37 + normY * 6;
-      const eyeSpan = boxW * 0.15;
-
-      const blinkAmt = this.blinkProgress > 0
-        ? (this.blinkProgress <= 1 ? this.blinkProgress : 2 - this.blinkProgress)
-        : 0;
-
-      if (blinkAmt > 0) {
-        const lidH = Math.max(3, boxH * 0.06 * blinkAmt);
-        ctx.fillStyle = `rgba(5, 6, 11, ${0.95 * blinkAmt})`;
-        ctx.fillRect(eyeCenterX - eyeSpan * 0.5, eyeCenterY - lidH * 0.5, eyeSpan, lidH);
-      } else {
-        const pulse = 0.32 + 0.18 * Math.sin(now * 0.008);
-        const glow = ctx.createRadialGradient(eyeCenterX, eyeCenterY, 2, eyeCenterX, eyeCenterY, eyeSpan * 0.85);
-        glow.addColorStop(0, `rgba(255, 42, 42, ${pulse})`);
-        glow.addColorStop(1, "rgba(255, 42, 42, 0)");
-        ctx.fillStyle = glow;
-        ctx.fillRect(eyeCenterX - eyeSpan, eyeCenterY - eyeSpan * 0.5, eyeSpan * 2, eyeSpan);
-      }
-
-      const ringRadius = Math.min(boxW, boxH) * 0.22;
-      ctx.save();
-      ctx.translate(eyeCenterX, eyeCenterY);
-      ctx.rotate((now * 0.0012) % (Math.PI * 2));
-      ctx.strokeStyle = "rgba(248, 113, 113, 0.36)";
-      ctx.lineWidth = 1.2;
-      ctx.setLineDash([10, 8]);
-      ctx.beginPath();
-      ctx.arc(0, 0, ringRadius, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+      ctx.fillText("LIVE SUBJECT // FACE + EYES LOCKED", leftBox, Math.max(pad + 44, topBox - 6));
     }
 
-    // Error Sparks & Lightning Arcs (only when an actual error occurs)
     if (this.sparkIntensity > 0.05) {
       ctx.fillStyle = `rgba(255, 60, 30, ${Math.min(0.22, this.sparkIntensity * 0.16)})`;
       ctx.fillRect(pad, pad, boxW, boxH);
@@ -626,7 +580,6 @@ export class HudCanvas {
       ctx.restore();
     }
 
-    // Sharp corner HUD brackets
     const bLen = 20;
     ctx.strokeStyle = this.sparkIntensity > 0.2 ? "rgba(253, 224, 71, 0.95)" : "rgba(248, 113, 113, 0.92)";
     ctx.lineWidth = 2;
@@ -648,7 +601,6 @@ export class HudCanvas {
     ctx.lineTo(width - pad - 6, height - pad - 6 - bLen);
     ctx.stroke();
 
-    // Evolution & Scanner telemetry readout
     ctx.fillStyle = "rgba(252, 165, 165, 0.95)";
     ctx.font = "11px monospace";
     const sparkTag = this.sparkIntensity > 0.1 ? ` // ⚡ ${this.sparkReason}` : "";
