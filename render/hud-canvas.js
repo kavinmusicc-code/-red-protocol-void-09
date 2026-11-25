@@ -30,8 +30,13 @@ export class HudCanvas {
     this.evolutionPower = 6148;
     this.upgradeLog = "UPGRADE #65 // 100% OVERDRIVE CORE // PWR:6148";
 
-    // Ollama runs locally without API key; OpenClaw & Mythos each take a single user key
-    this.requiredNodes = ["ollama", "openclaw", "mythos"];
+    // Robot Voice state
+    this.voiceEnabled = true;
+    this.voiceSpeaking = false;
+    this.lastSpokenText = "";
+
+    // Ollama runs locally without API key; OpenClaw, Mythos & Grok each take a single user key
+    this.requiredNodes = ["ollama", "openclaw", "mythos", "grok"];
     this.nodes = {
       ollama: {
         label: "OLLAMA",
@@ -78,11 +83,24 @@ export class HudCanvas {
         autoDetected: false,
         core: "MYTHOS_ENGINE",
         status: "KEY_REQUIRED"
+      },
+      grok: {
+        label: "GROK",
+        url: "https://api.x.ai/v1/models",
+        candidates: [
+          "https://api.x.ai/v1/models"
+        ],
+        apiKey: "",
+        required: true,
+        keyRequired: true,
+        autoDetected: false,
+        model: "grok-3",
+        status: "KEY_REQUIRED"
       }
     };
     this._drawerInputs = null;
-    this.activeNode = "OLLAMA+OPENCLAW+MYTHOS";
-    this.bridgeStatus = `READY: ${this.readinessPercent}% // PWR:${this.evolutionPower}`;
+    this.activeNode = "OLLAMA+OPENCLAW+MYTHOS+GROK";
+    this.bridgeStatus = `READY: ${this.readinessPercent}% // PWR:${this.evolutionPower} // GROK READY`;
 
     // Error spark state (only on real errors)
     this.sparks = [];
@@ -110,6 +128,67 @@ export class HudCanvas {
     this._createScannerControls();
     this._initFaceDetector();
     this._bindGlobalErrors();
+    this._hookExecuteButton();
+  }
+
+  speak(text, { pitch = 0.88, rate = 1.05, force = false } = {}) {
+    const clean = String(text || "").trim();
+    if (!clean) return false;
+    this.lastSpokenText = clean;
+    if (!this.voiceEnabled && !force) return false;
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
+
+    try {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(clean);
+      utter.pitch = pitch;
+      utter.rate = rate;
+      utter.volume = 1.0;
+
+      const voices = window.speechSynthesis.getVoices ? window.speechSynthesis.getVoices() : [];
+      const preferred = voices.find((v) => /hi|en-GB|en-US|Google|Microsoft/i.test(v.lang + " " + v.name));
+      if (preferred) utter.voice = preferred;
+
+      utter.onstart = () => {
+        this.voiceSpeaking = true;
+      };
+      utter.onend = () => {
+        this.voiceSpeaking = false;
+      };
+      utter.onerror = () => {
+        this.voiceSpeaking = false;
+      };
+
+      window.speechSynthesis.speak(utter);
+      return true;
+    } catch {
+      this.voiceSpeaking = false;
+      return false;
+    }
+  }
+
+  _hookExecuteButton() {
+    if (typeof document === "undefined") return;
+    const attach = () => {
+      const buttons = Array.from(document.querySelectorAll("button"));
+      const execBtn = buttons.find((b) => /execute/i.test((b.textContent || "").trim()));
+      if (!execBtn || execBtn.dataset.voidVoiceBound) return;
+      execBtn.dataset.voidVoiceBound = "1";
+      execBtn.addEventListener("click", () => {
+        const inputs = Array.from(document.querySelectorAll("input[type='text'], textarea"));
+        const cmdInput = inputs.find((el) => !el.closest(".void09-node-drawer") && String(el.value || "").trim().length > 0);
+        const query = cmdInput ? String(cmdInput.value).trim() : "";
+        this.boostPower(250);
+        this.triggerSpark("COMMAND_OVERDRIVE", 1.25);
+        if (query) {
+          this.speak(`Executing command on VOID-09. Power ${this.evolutionPower}. ${query.slice(0, 90)}`);
+        } else {
+          this.speak(`VOID-09 overdrive engaged. Power ${this.evolutionPower}.`);
+        }
+      });
+    };
+    setTimeout(attach, 300);
+    setTimeout(attach, 1200);
   }
 
   boostPower(amount = 6000) {
@@ -118,7 +197,9 @@ export class HudCanvas {
     this.evolutionPower = Math.max(6000, this.evolutionPower) + add;
     this.upgradeStep += 1;
     this.upgradeLog = `UPGRADE #${this.upgradeStep} // 100% OVERDRIVE // PWR:${this.evolutionPower}`;
-    this.bridgeStatus = `100% READY // PWR:${this.evolutionPower} // OLLAMA LOCAL + OPENCLAW + MYTHOS`;
+    this.bridgeStatus = `100% READY // PWR:${this.evolutionPower} // OLLAMA + OPENCLAW + MYTHOS + GROK`;
+    this.triggerSpark("OVERDRIVE_BOOST", 1.35);
+    this.speak(`Overdrive boost active. Power level ${this.evolutionPower}.`);
     return this.evolutionPower;
   }
 
@@ -159,6 +240,7 @@ export class HudCanvas {
       const labels = missing.map((k) => this.nodes[k].label).join(" + ");
       this.bridgeStatus = `MISSING REQUIRED: ${labels} // PWR:${this.evolutionPower}`;
       this.triggerSpark("REQUIRED_NODE_MISSING", 1.2);
+      this.speak(`Missing required configuration for ${labels}.`);
       return false;
     }
     return true;
@@ -220,10 +302,14 @@ export class HudCanvas {
 
     if (found.length > 0) {
       this.bridgeStatus = `DETECTED: ${found.join(" + ")} // PWR:${this.evolutionPower}`;
+      if (!silentSpark) {
+        this.speak(`Detected ${found.join(" and ")}.`);
+      }
     } else {
-      this.bridgeStatus = `100% SHELL // PWR:${this.evolutionPower} // OLLAMA LOCAL READY`;
+      this.bridgeStatus = `100% SHELL // PWR:${this.evolutionPower} // OLLAMA LOCAL + GROK READY`;
       if (!silentSpark) {
         this.triggerSpark("AUTO_DETECT_NONE", 1.0);
+        this.speak("Scan complete. Enter required API keys for OpenClaw, Mythos, and Grok.");
       }
     }
     return found;
@@ -245,12 +331,14 @@ export class HudCanvas {
       node.status = "LINK_REQUIRED";
       this.bridgeStatus = `${node.label} LINK REQUIRED // PWR:${this.evolutionPower}`;
       this.triggerSpark(`${node.label}_LINK_REQUIRED`, 1.1);
+      this.speak(`${node.label} link required.`);
       return false;
     }
     if (node.keyRequired && (!node.apiKey || !String(node.apiKey).trim())) {
       node.status = "KEY_REQUIRED";
       this.bridgeStatus = `${node.label} API KEY REQUIRED // PWR:${this.evolutionPower}`;
       this.triggerSpark(`${node.label}_KEY_REQUIRED`, 1.15);
+      this.speak(`${node.label} API key required.`);
       return false;
     }
 
@@ -262,12 +350,15 @@ export class HudCanvas {
     if (ok) {
       node.status = "LINKED";
       this.bridgeStatus = `${node.label} LINKED // PWR:${this.evolutionPower}`;
+      this.triggerSpark(`${node.label}_LINKED`, 0.9);
+      this.speak(`${node.label} linked and ready.`);
       return true;
     }
 
     node.status = node.keyRequired ? "OFFLINE/LOCAL" : "LOCAL_RUN";
     this.bridgeStatus = `${node.label} UNREACHABLE // PWR:${this.evolutionPower}`;
     this.triggerSpark(`${node.label}_LINK_FAULT`, 1.1);
+    this.speak(`${node.label} unreachable. Check link or key.`);
     return false;
   }
 
@@ -275,14 +366,17 @@ export class HudCanvas {
     if (!this.validateRequiredNodes()) {
       return false;
     }
-    this.bridgeStatus = `SYNCING ALL 3 // PWR:${this.evolutionPower}...`;
+    this.bridgeStatus = `SYNCING ALL 4 // PWR:${this.evolutionPower}...`;
     await Promise.all([
       this.pingNode("ollama"),
       this.pingNode("openclaw"),
-      this.pingNode("mythos")
+      this.pingNode("mythos"),
+      this.pingNode("grok")
     ]);
-    this.activeNode = "OLLAMA+OPENCLAW+MYTHOS";
-    this.bridgeStatus = `PWR:${this.evolutionPower} | OL:${this.nodes.ollama.status} | OC:${this.nodes.openclaw.status} | MY:${this.nodes.mythos.status}`;
+    this.activeNode = "OLLAMA+OPENCLAW+MYTHOS+GROK";
+    this.bridgeStatus = `PWR:${this.evolutionPower} | OL:${this.nodes.ollama.status} | OC:${this.nodes.openclaw.status} | MY:${this.nodes.mythos.status} | GK:${this.nodes.grok.status}`;
+    this.triggerSpark("ALL_NODES_SYNCED", 1.3);
+    this.speak("All nodes synchronized. VOID-09 online.");
     return true;
   }
 
@@ -297,10 +391,10 @@ export class HudCanvas {
 
   triggerSpark(reason = "SYSTEM_ERROR", power = 1.15) {
     const now = performance.now();
-    if (now - this.lastErrorSparkAt < 350 && this.sparkIntensity > 0.4) return;
+    if (now - this.lastErrorSparkAt < 260 && this.sparkIntensity > 0.5) return;
     this.lastErrorSparkAt = now;
     this.sparkReason = String(reason || "SYSTEM_ERROR");
-    this.sparkIntensity = Math.min(1.4, Math.max(this.sparkIntensity, power));
+    this.sparkIntensity = Math.min(1.5, Math.max(this.sparkIntensity, power));
 
     const rect = this.canvas ? this.canvas.getBoundingClientRect() : { width: 640, height: 320 };
     const w = Math.max(300, rect.width || 640);
@@ -308,45 +402,45 @@ export class HudCanvas {
     const cx = w * 0.5;
     const cy = h * 0.42;
 
-    const count = Math.floor(30 * power);
+    const count = Math.floor(38 * power);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = (2.0 + Math.random() * 8.0) * power;
+      const speed = (2.2 + Math.random() * 8.8) * power;
       const hot = Math.random();
       const color =
-        hot > 0.68 ? "#ffffff" :
-        hot > 0.35 ? "#ffea54" :
-        hot > 0.12 ? "#ff4d29" : "#ff1e42";
+        hot > 0.7 ? "#ffffff" :
+        hot > 0.38 ? "#ffea54" :
+        hot > 0.14 ? "#ff4d29" : "#ff1e42";
       this.sparks.push({
-        x: cx + (Math.random() - 0.5) * 36,
-        y: cy + (Math.random() - 0.5) * 28,
+        x: cx + (Math.random() - 0.5) * 42,
+        y: cy + (Math.random() - 0.5) * 32,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 1.0,
+        vy: Math.sin(angle) * speed - 1.2,
         life: 1,
-        decay: 0.024 + Math.random() * 0.03,
-        size: 1.5 + Math.random() * 2.6,
+        decay: 0.022 + Math.random() * 0.028,
+        size: 1.6 + Math.random() * 2.8,
         color
       });
     }
 
-    const arcCount = Math.floor(5 * power);
+    const arcCount = Math.floor(6 * power);
     this.arcs = [];
     for (let a = 0; a < arcCount; a++) {
       const targetAngle = Math.random() * Math.PI * 2;
-      const dist = (45 + Math.random() * Math.min(w, h) * 0.34) * power;
+      const dist = (45 + Math.random() * Math.min(w, h) * 0.36) * power;
       const ex = Math.max(12, Math.min(w - 12, cx + Math.cos(targetAngle) * dist));
       const ey = Math.max(12, Math.min(h - 12, cy + Math.sin(targetAngle) * dist));
       const pts = [{ x: cx, y: cy }];
-      const segs = 5;
+      const segs = 6;
       for (let s = 1; s < segs; s++) {
         const t = s / segs;
         pts.push({
-          x: cx + (ex - cx) * t + (Math.random() - 0.5) * 24,
-          y: cy + (ey - cy) * t + (Math.random() - 0.5) * 24
+          x: cx + (ex - cx) * t + (Math.random() - 0.5) * 28,
+          y: cy + (ey - cy) * t + (Math.random() - 0.5) * 28
         });
       }
       pts.push({ x: ex, y: ey });
-      this.arcs.push({ pts, life: 1, decay: 0.085 + Math.random() * 0.05 });
+      this.arcs.push({ pts, life: 1, decay: 0.075 + Math.random() * 0.05 });
     }
   }
 
@@ -402,10 +496,32 @@ export class HudCanvas {
       if (this.scannerActive) {
         this.stopScanner();
         btn.textContent = "SCAN FACE & EYES";
+        this.speak("Scanner stopped.");
       } else {
         this.startScanner().then((ok) => {
           btn.textContent = ok ? "STOP SCAN" : "SCAN FACE & EYES";
+          if (ok) this.speak("Optic scanner online. Tracking face and eyes.");
         });
+      }
+    });
+
+    const voiceBtn = document.createElement("button");
+    voiceBtn.type = "button";
+    voiceBtn.textContent = this.voiceEnabled ? "VOICE: ON" : "VOICE: OFF";
+    voiceBtn.style.cssText = [
+      "background:rgba(15,23,42,0.92)",
+      "color:#86efac",
+      "border:1px solid rgba(134,239,172,0.6)",
+      "padding:4px 7px",
+      "cursor:pointer",
+      "text-transform:uppercase"
+    ].join(";");
+    voiceBtn.addEventListener("click", () => {
+      this.voiceEnabled = !this.voiceEnabled;
+      voiceBtn.textContent = this.voiceEnabled ? "VOICE: ON" : "VOICE: OFF";
+      voiceBtn.style.color = this.voiceEnabled ? "#86efac" : "#f87171";
+      if (this.voiceEnabled) {
+        this.speak("Robot voice activated.", { force: true });
       }
     });
 
@@ -417,22 +533,23 @@ export class HudCanvas {
       "top:42px",
       "right:14px",
       "z-index:25",
-      "width:295px",
-      "background:rgba(8,11,20,0.96)",
-      "border:1px solid rgba(248,113,113,0.65)",
+      "width:305px",
+      "background:rgba(8,11,20,0.97)",
+      "border:1px solid rgba(248,113,113,0.75)",
       "padding:8px",
       "font-family:monospace",
       "font-size:10px",
-      "color:#fecaca"
+      "color:#fecaca",
+      "box-shadow:0 0 22px rgba(239,68,68,0.35)"
     ].join(";");
 
     const reqBanner = document.createElement("div");
-    reqBanner.textContent = `100% CORE // PWR:${this.evolutionPower} // OLLAMA LOCAL + 2 KEYS`;
-    reqBanner.style.cssText = "color:#fca5a5;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid rgba(248,113,113,0.25);";
+    reqBanner.textContent = `100% CORE // PWR:${this.evolutionPower} // OLLAMA LOCAL + 3 KEYS`;
+    reqBanner.style.cssText = "color:#fde047;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid rgba(248,113,113,0.3);";
     drawer.appendChild(reqBanner);
 
     const reqErrorEl = document.createElement("div");
-    reqErrorEl.style.cssText = "display:none;color:#fde047;background:rgba(127,29,29,0.55);border:1px solid rgba(253,224,71,0.5);padding:4px 5px;margin-bottom:6px;";
+    reqErrorEl.style.cssText = "display:none;color:#fde047;background:rgba(127,29,29,0.6);border:1px solid rgba(253,224,71,0.55);padding:4px 5px;margin-bottom:6px;";
 
     const inputs = {};
     this.requiredNodes.forEach((key) => {
@@ -491,7 +608,7 @@ export class HudCanvas {
     const saveBtn = document.createElement("button");
     saveBtn.type = "button";
     saveBtn.textContent = "APPLY & SYNC REQUIRED NODES";
-    saveBtn.style.cssText = "width:100%;background:rgba(185,28,28,0.92);color:#fff;border:1px solid rgba(254,202,202,0.7);padding:4px 6px;cursor:pointer;";
+    saveBtn.style.cssText = "width:100%;background:rgba(185,28,28,0.95);color:#fff;border:1px solid rgba(254,202,202,0.8);padding:4px 6px;cursor:pointer;";
     saveBtn.addEventListener("click", () => {
       this.requiredNodes.forEach((key) => {
         const node = this.nodes[key];
@@ -550,9 +667,9 @@ export class HudCanvas {
     syncBtn.type = "button";
     syncBtn.textContent = "SYNC ALL*";
     syncBtn.style.cssText = [
-      "background:rgba(127,29,29,0.92)",
+      "background:rgba(127,29,29,0.95)",
       "color:#fde047",
-      "border:1px solid rgba(253,224,71,0.65)",
+      "border:1px solid rgba(253,224,71,0.75)",
       "padding:4px 7px",
       "cursor:pointer",
       "text-transform:uppercase"
@@ -569,10 +686,12 @@ export class HudCanvas {
     });
 
     bar.appendChild(btn);
+    bar.appendChild(voiceBtn);
     bar.appendChild(linksToggleBtn);
     bar.appendChild(makeLinkBtn("OLLAMA", "ollama"));
     bar.appendChild(makeLinkBtn("OPENCLAW", "openclaw"));
     bar.appendChild(makeLinkBtn("MYTHOS", "mythos"));
+    bar.appendChild(makeLinkBtn("GROK", "grok"));
     bar.appendChild(syncBtn);
     parent.appendChild(bar);
     parent.appendChild(drawer);
@@ -716,13 +835,13 @@ export class HudCanvas {
     if (now - this.lastUpgradeAt >= 2500) {
       this.lastUpgradeAt = now;
       this.upgradeStep += 1;
-      this.evolutionPower = Math.max(6000, this.evolutionPower) + Math.floor(25 + ((this.upgradeStep * 13) % 45));
+      this.evolutionPower = Math.max(6000, this.evolutionPower) + Math.floor(35 + ((this.upgradeStep * 17) % 65));
       const protocols = [
         "100% OVERDRIVE OPTIC GAIN",
         "6000+ RETICLE OVERCLOCK",
         "APEX EYE-SYNC MATRIX",
         "CRIMSON SURGE CORE",
-        "PREDATOR VECTOR BOOST"
+        "GROK + VOID HYPER-LINK"
       ];
       const tag = protocols[this.upgradeStep % protocols.length];
       this.upgradeLog = `UPGRADE #${this.upgradeStep} // ${tag} // PWR:${this.evolutionPower}`;
@@ -730,7 +849,7 @@ export class HudCanvas {
   }
 
   _updateSparks() {
-    this.sparkIntensity = Math.max(0, this.sparkIntensity - 0.025);
+    this.sparkIntensity = Math.max(0, this.sparkIntensity - 0.022);
     for (let i = this.sparks.length - 1; i >= 0; i--) {
       const p = this.sparks[i];
       p.x += p.vx;
@@ -808,45 +927,44 @@ export class HudCanvas {
     const cx = rx + rw * 0.5 + normX * 14;
     const cy = ry + rh * 0.46 + normY * 10;
     const unit = Math.min(rw, rh);
+    const speakPulse = this.voiceSpeaking ? (0.85 + 0.35 * Math.abs(Math.sin(now * 0.025))) : 1;
 
-    const aura = ctx.createRadialGradient(cx, cy - unit * 0.04, unit * 0.04, cx, cy, unit * 0.54);
-    aura.addColorStop(0, "rgba(239, 68, 68, 0.34)");
-    aura.addColorStop(0.6, "rgba(153, 27, 27, 0.12)");
+    const aura = ctx.createRadialGradient(cx, cy - unit * 0.04, unit * 0.04, cx, cy, unit * 0.58 * speakPulse);
+    aura.addColorStop(0, "rgba(255, 55, 55, 0.45)");
+    aura.addColorStop(0.55, "rgba(253, 224, 71, 0.14)");
     aura.addColorStop(1, "rgba(5, 7, 13, 0)");
     ctx.fillStyle = aura;
     ctx.fillRect(rx, ry, rw, rh);
 
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate((now * 0.001) % (Math.PI * 2));
-    ctx.strokeStyle = "rgba(248, 113, 113, 0.38)";
-    ctx.lineWidth = 1.4;
-    ctx.setLineDash([12, 8]);
+    ctx.rotate((now * 0.0016) % (Math.PI * 2));
+    ctx.strokeStyle = "rgba(255, 85, 85, 0.62)";
+    ctx.lineWidth = 1.7;
+    ctx.setLineDash([14, 7]);
     ctx.beginPath();
-    ctx.arc(0, 0, unit * 0.34, 0, Math.PI * 2);
+    ctx.arc(0, 0, unit * 0.35 * speakPulse, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
 
-    if (this.upgradeStep >= 11) {
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate((-now * 0.0018) % (Math.PI * 2));
-      ctx.strokeStyle = "rgba(253, 224, 71, 0.42)";
-      ctx.lineWidth = 1.1;
-      ctx.setLineDash([5, 6]);
-      ctx.beginPath();
-      ctx.arc(0, 0, unit * 0.39, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((-now * 0.0024) % (Math.PI * 2));
+    ctx.strokeStyle = "rgba(253, 224, 71, 0.55)";
+    ctx.lineWidth = 1.3;
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath();
+    ctx.arc(0, 0, unit * 0.40, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
 
     const headW = unit * 0.34;
     const headH = unit * 0.42;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.fillStyle = "#0c0f18";
-    ctx.strokeStyle = "rgba(248, 113, 113, 0.88)";
-    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = this.voiceSpeaking ? "rgba(253, 224, 71, 0.98)" : "rgba(248, 113, 113, 0.92)";
+    ctx.lineWidth = 2.0;
 
     ctx.beginPath();
     ctx.moveTo(0, -headH * 0.62);
@@ -860,8 +978,8 @@ export class HudCanvas {
     ctx.fill();
     ctx.stroke();
 
-    ctx.strokeStyle = "rgba(239, 68, 68, 0.55)";
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = "rgba(255, 75, 75, 0.68)";
+    ctx.lineWidth = 1.3;
     ctx.beginPath();
     ctx.moveTo(-headW * 0.44, -headH * 0.14);
     ctx.lineTo(0, -headH * 0.02);
@@ -877,10 +995,10 @@ export class HudCanvas {
       : 0;
     const openFactor = Math.max(0.08, 1 - blinkAmt);
 
-    const pulse = 0.78 + 0.22 * Math.sin(now * 0.008);
-    ctx.fillStyle = `rgba(255, 50, 50, ${pulse})`;
-    ctx.shadowColor = "#ff2a2a";
-    ctx.shadowBlur = 11;
+    const pulse = 0.8 + 0.2 * Math.sin(now * 0.01);
+    ctx.fillStyle = this.voiceSpeaking ? `rgba(253, 224, 71, ${pulse})` : `rgba(255, 50, 50, ${pulse})`;
+    ctx.shadowColor = this.voiceSpeaking ? "#fde047" : "#ff2a2a";
+    ctx.shadowBlur = 14;
 
     ctx.beginPath();
     ctx.moveTo(-eyeDx - eyeW * 0.5, eyeY);
@@ -897,11 +1015,12 @@ export class HudCanvas {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    ctx.strokeStyle = "rgba(252, 165, 165, 0.45)";
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = this.voiceSpeaking ? "rgba(253, 224, 71, 0.85)" : "rgba(252, 165, 165, 0.5)";
+    ctx.lineWidth = 1.3;
     for (let g = 0; g < 3; g++) {
       const gy = headH * (0.24 + g * 0.09);
-      const gw = headW * (0.22 - g * 0.03);
+      const wave = this.voiceSpeaking ? Math.sin(now * 0.025 + g) * 4 : 0;
+      const gw = headW * (0.22 - g * 0.03) + wave;
       ctx.beginPath();
       ctx.moveTo(-gw, gy);
       ctx.lineTo(gw, gy);
@@ -910,9 +1029,10 @@ export class HudCanvas {
 
     ctx.restore();
 
-    ctx.fillStyle = "rgba(252, 165, 165, 0.9)";
+    ctx.fillStyle = "rgba(253, 224, 71, 0.95)";
     ctx.font = "10px monospace";
-    ctx.fillText(`CORE // VOID-09 // LVL ${this.upgradeStep} // PWR:${this.evolutionPower}`, rx + 10, ry + 18);
+    const voiceTag = this.voiceSpeaking ? " // 🔊 SPEAKING" : (this.voiceEnabled ? " // VOICE:ON" : " // VOICE:OFF");
+    ctx.fillText(`CORE // VOID-09 // PWR:${this.evolutionPower}${voiceTag}`, rx + 10, ry + 18);
 
     ctx.restore();
   }
@@ -963,11 +1083,9 @@ export class HudCanvas {
       ctx.lineWidth = 1.6;
       ctx.strokeRect(leftBox, topBox, fw, fh);
 
-      if (this.upgradeStep >= 15) {
-        ctx.strokeStyle = "rgba(253, 224, 71, 0.72)";
-        ctx.lineWidth = 1.1;
-        ctx.strokeRect(leftBox - 5, topBox - 5, fw + 10, fh + 10);
-      }
+      ctx.strokeStyle = "rgba(253, 224, 71, 0.78)";
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(leftBox - 5, topBox - 5, fw + 10, fh + 10);
 
       const leftEyeX = fx - fw * 0.22;
       const rightEyeX = fx + fw * 0.22;
@@ -988,21 +1106,21 @@ export class HudCanvas {
       ctx.font = "10px monospace";
       ctx.fillText("FACE + EYES LOCKED", leftBox, Math.max(cy + 26, topBox - 5));
     } else {
-      ctx.strokeStyle = "rgba(239, 68, 68, 0.22)";
+      ctx.strokeStyle = "rgba(239, 68, 68, 0.28)";
       ctx.strokeRect(cx + 12, cy + 28, cw - 24, ch - 40);
-      ctx.fillStyle = "rgba(252, 165, 165, 0.85)";
+      ctx.fillStyle = "rgba(252, 165, 165, 0.9)";
       ctx.font = "11px monospace";
       ctx.fillText("CAM STANDBY", cx + 18, cy + ch * 0.48);
-      ctx.fillStyle = "rgba(248, 113, 113, 0.65)";
+      ctx.fillStyle = "rgba(253, 224, 71, 0.8)";
       ctx.font = "10px monospace";
       ctx.fillText("CLICK [SCAN FACE & EYES]", cx + 18, cy + ch * 0.48 + 16);
     }
 
-    const beamY = cy + ((now * 0.08) % Math.max(1, ch));
-    ctx.fillStyle = "rgba(255, 75, 75, 0.20)";
+    const beamY = cy + ((now * 0.11) % Math.max(1, ch));
+    ctx.fillStyle = "rgba(255, 75, 75, 0.25)";
     ctx.fillRect(cx, beamY, cw, 2);
 
-    ctx.fillStyle = "rgba(252, 165, 165, 0.85)";
+    ctx.fillStyle = "rgba(252, 165, 165, 0.88)";
     ctx.font = "10px monospace";
     ctx.fillText("OPTIC // CAM", cx + 10, cy + 18);
 
@@ -1032,8 +1150,8 @@ export class HudCanvas {
     this._updateSmoothFace();
     this._updateSparks();
 
-    const shakeX = this.sparkIntensity > 0 ? (Math.random() - 0.5) * 9 * this.sparkIntensity : 0;
-    const shakeY = this.sparkIntensity > 0 ? (Math.random() - 0.5) * 7 * this.sparkIntensity : 0;
+    const shakeX = this.sparkIntensity > 0 ? (Math.random() - 0.5) * 10 * this.sparkIntensity : 0;
+    const shakeY = this.sparkIntensity > 0 ? (Math.random() - 0.5) * 8 * this.sparkIntensity : 0;
     ctx.translate(shakeX, shakeY);
 
     ctx.fillStyle = "#040509";
@@ -1051,8 +1169,8 @@ export class HudCanvas {
       this._drawRobotPane(ctx, now, pad, pad, paneW, paneH);
       this._drawCameraPane(ctx, now, pad + paneW + gap, pad, boxW - paneW - gap, paneH);
 
-      ctx.strokeStyle = "rgba(248, 113, 113, 0.55)";
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(248, 113, 113, 0.65)";
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.moveTo(pad + paneW + gap * 0.5, pad + 6);
       ctx.lineTo(pad + paneW + gap * 0.5, pad + paneH - 6);
@@ -1064,7 +1182,7 @@ export class HudCanvas {
     }
 
     if (this.sparkIntensity > 0.05) {
-      ctx.fillStyle = `rgba(255, 60, 30, ${Math.min(0.22, this.sparkIntensity * 0.16)})`;
+      ctx.fillStyle = `rgba(255, 60, 30, ${Math.min(0.25, this.sparkIntensity * 0.18)})`;
       ctx.fillRect(pad, pad, boxW, boxH);
     }
 
@@ -1072,9 +1190,9 @@ export class HudCanvas {
       ctx.save();
       ctx.globalAlpha = Math.max(0, Math.min(1, arc.life));
       ctx.strokeStyle = "#fde047";
-      ctx.lineWidth = 2.4;
+      ctx.lineWidth = 2.6;
       ctx.shadowColor = "#ff3b1f";
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = 14;
       ctx.beginPath();
       arc.pts.forEach((pt, idx) => {
         if (idx === 0) ctx.moveTo(pt.x, pt.y);
@@ -1089,7 +1207,7 @@ export class HudCanvas {
       ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
       ctx.fillStyle = p.color;
       ctx.shadowColor = p.color;
-      ctx.shadowBlur = 10;
+      ctx.shadowBlur = 12;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
       ctx.fill();
@@ -1097,8 +1215,8 @@ export class HudCanvas {
     }
 
     const bLen = 18;
-    ctx.strokeStyle = this.sparkIntensity > 0.2 ? "rgba(253, 224, 71, 0.95)" : "rgba(248, 113, 113, 0.92)";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = this.sparkIntensity > 0.2 ? "rgba(253, 224, 71, 0.98)" : "rgba(248, 113, 113, 0.95)";
+    ctx.lineWidth = 2.2;
     ctx.beginPath();
     ctx.moveTo(pad + 4, pad + 4 + bLen);
     ctx.lineTo(pad + 4, pad + 4);
@@ -1117,14 +1235,14 @@ export class HudCanvas {
     ctx.lineTo(width - pad - 4, height - pad - 4 - bLen);
     ctx.stroke();
 
-    ctx.fillStyle = "rgba(4, 6, 12, 0.85)";
+    ctx.fillStyle = "rgba(4, 6, 12, 0.88)";
     ctx.fillRect(pad + 4, height - pad - 34, boxW - 8, 30);
 
-    ctx.fillStyle = "rgba(252, 165, 165, 0.95)";
+    ctx.fillStyle = "rgba(253, 224, 71, 0.96)";
     ctx.font = "11px monospace";
     const sparkTag = this.sparkIntensity > 0.1 ? ` // ⚡ ${this.sparkReason}` : "";
     ctx.fillText(`VOID-09 ${this.readinessPercent}% (LVL ${this.upgradeStep} // PWR:${this.evolutionPower}) // ${this.state}${sparkTag}`, pad + 12, height - pad - 21);
-    ctx.fillStyle = "rgba(248, 113, 113, 0.85)";
+    ctx.fillStyle = "rgba(252, 165, 165, 0.9)";
     ctx.font = "10px monospace";
     ctx.fillText(`${this.bridgeStatus} | ${this.scannerStatus}`, pad + 12, height - pad - 8);
 
