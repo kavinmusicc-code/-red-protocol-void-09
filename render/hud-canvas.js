@@ -11,7 +11,7 @@ export class HudCanvas {
     };
     this.img.onerror = () => {
       this.failed = true;
-      this.triggerSpark("ASSET_LOAD_FAULT", 1.35);
+      this.triggerSpark("ASSET_LOAD_ERROR", 1.25);
     };
     this.img.src = "./Asset/robot-face.jpg";
 
@@ -31,13 +31,12 @@ export class HudCanvas {
     this.evolutionPower = 12;
     this.upgradeLog = "CORE INITIALIZED // AUTO-EVOLUTION ACTIVE";
 
-    // Dangerous spark & error anomaly state
+    // Error spark state (only on real faults/errors)
     this.sparks = [];
     this.arcs = [];
     this.sparkIntensity = 0;
     this.sparkReason = "";
     this.lastErrorSparkAt = 0;
-    this._sparkBtn = null;
 
     // Face & eye scanner state
     this.scannerActive = false;
@@ -61,19 +60,19 @@ export class HudCanvas {
 
   _bindGlobalErrors() {
     window.addEventListener("error", () => {
-      this.triggerSpark("RUNTIME_EXCEPTION", 1.25);
+      this.triggerSpark("RUNTIME_ERROR", 1.25);
     });
     window.addEventListener("unhandledrejection", () => {
-      this.triggerSpark("ASYNC_FAULT", 1.2);
+      this.triggerSpark("PROMISE_ERROR", 1.2);
     });
   }
 
-  triggerSpark(reason = "SURGE_FAULT", power = 1.0) {
+  triggerSpark(reason = "SYSTEM_ERROR", power = 1.1) {
     const now = performance.now();
-    if (now - this.lastErrorSparkAt < 250 && this.sparkIntensity > 0.4) return;
+    if (now - this.lastErrorSparkAt < 350 && this.sparkIntensity > 0.4) return;
     this.lastErrorSparkAt = now;
-    this.sparkReason = String(reason || "ANOMALY_SPARK");
-    this.sparkIntensity = Math.min(1.5, Math.max(this.sparkIntensity, power));
+    this.sparkReason = String(reason || "SYSTEM_ERROR");
+    this.sparkIntensity = Math.min(1.4, Math.max(this.sparkIntensity, power));
 
     const rect = this.canvas ? this.canvas.getBoundingClientRect() : { width: 640, height: 320 };
     const w = Math.max(300, rect.width || 640);
@@ -81,32 +80,32 @@ export class HudCanvas {
     const cx = w * (0.5 + Math.max(-0.3, Math.min(0.3, this.gazeX * 0.25)));
     const cy = h * (0.38 + Math.max(-0.25, Math.min(0.25, this.gazeY * 0.2)));
 
-    const count = Math.floor(34 * power);
+    const count = Math.floor(28 * power);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = (2.2 + Math.random() * 8.5) * power;
+      const speed = (2.0 + Math.random() * 7.5) * power;
       const hot = Math.random();
       const color =
         hot > 0.68 ? "#ffffff" :
         hot > 0.35 ? "#ffea54" :
         hot > 0.12 ? "#ff4d29" : "#ff1e42";
       this.sparks.push({
-        x: cx + (Math.random() - 0.5) * 36,
-        y: cy + (Math.random() - 0.5) * 28,
+        x: cx + (Math.random() - 0.5) * 32,
+        y: cy + (Math.random() - 0.5) * 24,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 1.2,
+        vy: Math.sin(angle) * speed - 1.0,
         life: 1,
-        decay: 0.022 + Math.random() * 0.035,
-        size: 1.5 + Math.random() * 2.8,
+        decay: 0.025 + Math.random() * 0.03,
+        size: 1.5 + Math.random() * 2.5,
         color
       });
     }
 
-    const arcCount = Math.floor(5 * power);
+    const arcCount = Math.floor(4 * power);
     this.arcs = [];
     for (let a = 0; a < arcCount; a++) {
       const targetAngle = Math.random() * Math.PI * 2;
-      const dist = (45 + Math.random() * Math.min(w, h) * 0.36) * power;
+      const dist = (40 + Math.random() * Math.min(w, h) * 0.32) * power;
       const ex = Math.max(12, Math.min(w - 12, cx + Math.cos(targetAngle) * dist));
       const ey = Math.max(12, Math.min(h - 12, cy + Math.sin(targetAngle) * dist));
       const pts = [{ x: cx, y: cy }];
@@ -114,12 +113,12 @@ export class HudCanvas {
       for (let s = 1; s < segs; s++) {
         const t = s / segs;
         pts.push({
-          x: cx + (ex - cx) * t + (Math.random() - 0.5) * 26,
-          y: cy + (ey - cy) * t + (Math.random() - 0.5) * 26
+          x: cx + (ex - cx) * t + (Math.random() - 0.5) * 24,
+          y: cy + (ey - cy) * t + (Math.random() - 0.5) * 24
         });
       }
       pts.push({ x: ex, y: ey });
-      this.arcs.push({ pts, life: 1, decay: 0.08 + Math.random() * 0.06 });
+      this.arcs.push({ pts, life: 1, decay: 0.085 + Math.random() * 0.05 });
     }
   }
 
@@ -169,23 +168,6 @@ export class HudCanvas {
       "text-transform:uppercase"
     ].join(";");
 
-    const sparkBtn = document.createElement("button");
-    sparkBtn.type = "button";
-    sparkBtn.textContent = "⚡ SPARK TEST";
-    sparkBtn.style.cssText = [
-      "background:rgba(24,24,27,0.92)",
-      "color:#fde047",
-      "border:1px solid rgba(250,204,21,0.65)",
-      "padding:4px 8px",
-      "cursor:pointer",
-      "letter-spacing:0.5px",
-      "text-transform:uppercase"
-    ].join(";");
-    sparkBtn.addEventListener("click", () => {
-      this.triggerSpark("MANUAL_OVERLOAD_TEST", 1.3);
-    });
-    this._sparkBtn = sparkBtn;
-
     btn.addEventListener("click", () => {
       if (this.scannerActive) {
         this.stopScanner();
@@ -197,7 +179,6 @@ export class HudCanvas {
       }
     });
 
-    bar.appendChild(sparkBtn);
     bar.appendChild(btn);
     parent.appendChild(bar);
   }
@@ -205,7 +186,7 @@ export class HudCanvas {
   async startScanner() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       this.scannerStatus = "CAM API UNAVAILABLE";
-      this.triggerSpark("CAM_API_MISSING", 1.15);
+      this.triggerSpark("CAM_API_ERROR", 1.15);
       return false;
     }
     try {
@@ -224,7 +205,7 @@ export class HudCanvas {
     } catch {
       this.scannerStatus = "CAM PERMISSION DENIED / OFFLINE";
       this.scannerActive = false;
-      this.triggerSpark("CAM_ACCESS_ERROR", 1.25);
+      this.triggerSpark("CAM_PERMISSION_ERROR", 1.2);
       return false;
     }
   }
@@ -270,7 +251,6 @@ export class HudCanvas {
         return;
       } catch {
         this.detector = null;
-        this.triggerSpark("FACEDETECTOR_FAULT", 1.0);
       }
     }
 
@@ -331,9 +311,6 @@ export class HudCanvas {
       ];
       const tag = protocols[this.upgradeStep % protocols.length];
       this.upgradeLog = `UPGRADE #${this.upgradeStep} // ${tag} // PWR:${this.evolutionPower}`;
-      if (this.upgradeStep % 5 === 0) {
-        this.triggerSpark("OVERCLOCK_SURGE", 1.15);
-      }
     }
   }
 
@@ -383,7 +360,7 @@ export class HudCanvas {
     if (!newState) return;
     this.state = newState;
     const upper = String(newState).toUpperCase();
-    if (upper.includes("ERR") || upper.includes("FAIL") || upper.includes("CRIT") || upper.includes("ALERT") || upper.includes("WARN")) {
+    if (upper.includes("ERROR") || upper.includes("FAIL") || upper.includes("CRITICAL") || upper.includes("FAULT")) {
       this.triggerSpark(`STATE_${upper}`, 1.25);
     }
   }
@@ -423,8 +400,8 @@ export class HudCanvas {
     this._sampleSubject(now);
     this._updateSparks();
 
-    const shakeX = this.sparkIntensity > 0 ? (Math.random() - 0.5) * 10 * this.sparkIntensity : 0;
-    const shakeY = this.sparkIntensity > 0 ? (Math.random() - 0.5) * 8 * this.sparkIntensity : 0;
+    const shakeX = this.sparkIntensity > 0 ? (Math.random() - 0.5) * 9 * this.sparkIntensity : 0;
+    const shakeY = this.sparkIntensity > 0 ? (Math.random() - 0.5) * 7 * this.sparkIntensity : 0;
     ctx.translate(shakeX, shakeY);
 
     ctx.fillStyle = "#040509";
@@ -481,7 +458,6 @@ export class HudCanvas {
 
       ctx.drawImage(this.img, sx, sy, zW, zH, pad, pad, boxW, boxH);
 
-      // Subtle tactical grid overlay
       ctx.strokeStyle = "rgba(239, 68, 68, 0.08)";
       ctx.lineWidth = 1;
       const stepGrid = 28;
@@ -498,7 +474,6 @@ export class HudCanvas {
         ctx.stroke();
       }
 
-      // Dangerous dark-crimson vignette
       const vig = ctx.createRadialGradient(
         width * 0.5 + gazeOffsetX * 0.5,
         height * 0.42 + gazeOffsetY * 0.5,
@@ -513,7 +488,6 @@ export class HudCanvas {
       ctx.fillStyle = vig;
       ctx.fillRect(pad, pad, boxW, boxH);
 
-      // Optic eye-blink & fierce crimson glow
       const blinkAmt = this.blinkProgress > 0
         ? (this.blinkProgress <= 1 ? this.blinkProgress : 2 - this.blinkProgress)
         : 0;
@@ -535,7 +509,6 @@ export class HudCanvas {
         ctx.fillRect(eyeCenterX - eyeSpan, eyeCenterY - eyeSpan * 0.5, eyeSpan * 2, eyeSpan);
       }
 
-      // Rotating outer target ring
       const ringRadius = Math.min(boxW, boxH) * 0.22;
       ctx.save();
       ctx.translate(eyeCenterX, eyeCenterY);
@@ -548,7 +521,6 @@ export class HudCanvas {
       ctx.stroke();
       ctx.restore();
 
-      // Sweeping laser scan beam
       const beamY = pad + ((now * 0.08) % boxH);
       const beamGrad = ctx.createLinearGradient(0, beamY - 9, 0, beamY + 9);
       beamGrad.addColorStop(0, "rgba(239, 68, 68, 0)");
@@ -557,7 +529,6 @@ export class HudCanvas {
       ctx.fillStyle = beamGrad;
       ctx.fillRect(pad, beamY - 9, boxW, 18);
 
-      // Live Face + Eyes scan box
       if (this.scannerActive && this.detectedFace) {
         const fx = pad + this.detectedFace.x * boxW;
         const fy = pad + this.detectedFace.y * boxH;
@@ -583,9 +554,8 @@ export class HudCanvas {
         ctx.fillText("FACE+EYES LOCKED", leftBox, topBox - 5);
       }
 
-      // Dangerous high-voltage sparks & lightning arcs
       if (this.sparkIntensity > 0.05) {
-        ctx.fillStyle = `rgba(255, 60, 30, ${Math.min(0.24, this.sparkIntensity * 0.18)})`;
+        ctx.fillStyle = `rgba(255, 60, 30, ${Math.min(0.22, this.sparkIntensity * 0.16)})`;
         ctx.fillRect(pad, pad, boxW, boxH);
       }
 
@@ -617,7 +587,6 @@ export class HudCanvas {
         ctx.restore();
       }
 
-      // Sharp corner HUD brackets
       const bLen = 20;
       ctx.strokeStyle = this.sparkIntensity > 0.2 ? "rgba(253, 224, 71, 0.95)" : "rgba(248, 113, 113, 0.92)";
       ctx.lineWidth = 2;
@@ -639,7 +608,6 @@ export class HudCanvas {
       ctx.lineTo(width - pad - 6, height - pad - 6 - bLen);
       ctx.stroke();
 
-      // Evolution & Scanner telemetry readout
       ctx.fillStyle = "rgba(252, 165, 165, 0.95)";
       ctx.font = "11px monospace";
       const sparkTag = this.sparkIntensity > 0.1 ? ` // ⚡ ${this.sparkReason}` : "";
