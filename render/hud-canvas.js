@@ -30,18 +30,17 @@ export class HudCanvas {
     this.upgradeStep = 1;
     this.evolutionPower = this.baseHorsepower;
 
-    // Load & Red Siren / Danger Overload state
-    this.loadPercent = 28;
-    this.dangerMode = false;
-    this._audioCtx = null;
-    this._sirenTimer = null;
-    this._sirenBtn = null;
-
     // Collective cognition & instinct scale: 20,000 humans (mind + action) & 10,000 animals (perception)
     this.humanCognitionCount = 20000;
     this.humanActionPower = 20000;
     this.animalPerceptionCount = 10000;
     this.upgradeLog = `UPGRADE #1 // 20K HUMAN + 10K ANIMAL MATRIX // ${this._formatPower(this.evolutionPower)}`;
+
+    // Danger / Crash Siren & Red Combat Look state (real issues or explicit alert only)
+    this.dangerUntil = 0;
+    this.dangerReason = "";
+    this.lastSirenAt = 0;
+    this._audioCtx = null;
 
     // Robot Voice & Reply state
     this.voiceEnabled = true;
@@ -115,9 +114,9 @@ export class HudCanvas {
     };
     this._drawerInputs = null;
     this.activeNode = "OLLAMA+OPENCLAW+MYTHOS+GROK";
-    this.bridgeStatus = `${this._formatPower(this.evolutionPower)} // LOAD:${this.loadPercent}% // 2X LOOP`;
+    this.bridgeStatus = `${this._formatPower(this.evolutionPower)} // 20K HUMANS + 10K ANIMALS // 2X LOOP`;
 
-    // Error spark state (only on real errors)
+    // Spark state (only on manual/real events, never on 2.5s auto-upgrade)
     this.sparks = [];
     this.arcs = [];
     this.sparkIntensity = 0;
@@ -146,6 +145,74 @@ export class HudCanvas {
     this._hookExecuteButton();
   }
 
+  _isExpectedOfflineOrAuthNoise(text = "") {
+    const s = String(text || "").toLowerCase();
+    return (
+      s.includes("127.0.0.1") ||
+      s.includes("localhost") ||
+      s.includes("err_connection_refused") ||
+      s.includes("failed to fetch") ||
+      s.includes("networkerror") ||
+      s.includes("401") ||
+      s.includes("unauthorized")
+    );
+  }
+
+  isDangerActive(now = performance.now()) {
+    return now < this.dangerUntil;
+  }
+
+  _playSiren() {
+    if (typeof window === "undefined") return;
+    const now = performance.now();
+    if (now - this.lastSirenAt < 1500) return;
+    this.lastSirenAt = now;
+
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!this._audioCtx) this._audioCtx = new AudioCtx();
+      if (this._audioCtx.state === "suspended") {
+        this._audioCtx.resume().catch(() => {});
+      }
+
+      const ctx = this._audioCtx;
+      const t0 = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(520, t0);
+      osc.frequency.linearRampToValueAtTime(980, t0 + 0.35);
+      osc.frequency.linearRampToValueAtTime(540, t0 + 0.72);
+
+      gain.gain.setValueAtTime(0.001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.14, t0 + 0.06);
+      gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.75);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.76);
+    } catch {
+      // Audio blocked or unavailable
+    }
+  }
+
+  triggerDangerAlert(reason = "REAL_ISSUE", durationMs = 4500) {
+    const cleanReason = String(reason || "REAL_ISSUE");
+    if (this._isExpectedOfflineOrAuthNoise(cleanReason)) {
+      return;
+    }
+    const now = performance.now();
+    this.dangerReason = cleanReason;
+    this.dangerUntil = Math.max(this.dangerUntil, now + Math.max(1500, durationMs));
+    this.state = "RED_ALERT";
+    this.triggerSpark(this.dangerReason, 1.35);
+    this._playSiren();
+    this.setReply(`REAL ALERT: ${this.dangerReason}. Robot shifted to red combat mode.`);
+  }
+
   _formatPower(val) {
     const num = Number(val) || this.baseHorsepower;
     if (!Number.isFinite(num)) return "INFINITE-2X HP";
@@ -154,100 +221,7 @@ export class HudCanvas {
     return `${num.toLocaleString("en-US")} HP`;
   }
 
-  startSiren() {
-    if (typeof window === "undefined") return;
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-
-    try {
-      if (!this._audioCtx) {
-        this._audioCtx = new AudioCtx();
-      }
-      if (this._audioCtx.state === "suspended") {
-        this._audioCtx.resume();
-      }
-      if (this._sirenTimer) return;
-
-      let highTone = true;
-      const playPulse = () => {
-        if (!this.dangerMode || !this._audioCtx) return;
-        const now = this._audioCtx.currentTime;
-        const osc = this._audioCtx.createOscillator();
-        const gain = this._audioCtx.createGain();
-        osc.type = "sawtooth";
-        const f1 = highTone ? 880 : 520;
-        const f2 = highTone ? 520 : 880;
-        highTone = !highTone;
-
-        osc.frequency.setValueAtTime(f1, now);
-        osc.frequency.linearRampToValueAtTime(f2, now + 0.36);
-
-        gain.gain.setValueAtTime(0.001, now);
-        gain.gain.exponentialRampToValueAtTime(0.14, now + 0.04);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
-
-        osc.connect(gain);
-        gain.connect(this._audioCtx.destination);
-        osc.start(now);
-        osc.stop(now + 0.4);
-      };
-
-      playPulse();
-      this._sirenTimer = setInterval(playPulse, 420);
-      this._updateSirenButton();
-    } catch {
-      // Ignore audio errors if autoplay is blocked
-    }
-  }
-
-  stopSiren() {
-    if (this._sirenTimer) {
-      clearInterval(this._sirenTimer);
-      this._sirenTimer = null;
-    }
-    this._updateSirenButton();
-  }
-
-  _updateSirenButton() {
-    if (!this._sirenBtn) return;
-    if (this.dangerMode) {
-      this._sirenBtn.textContent = "SIREN: DANGER (STOP)";
-      this._sirenBtn.style.background = "rgba(220,38,38,0.98)";
-      this._sirenBtn.style.color = "#fef08a";
-    } else {
-      this._sirenBtn.textContent = "TEST RED SIREN";
-      this._sirenBtn.style.background = "rgba(15,23,42,0.92)";
-      this._sirenBtn.style.color = "#fca5a5";
-    }
-  }
-
-  triggerDangerOverload(reason = "HEAVY_LOAD_OVERFLOW") {
-    this.dangerMode = true;
-    this.loadPercent = Math.max(100, this.loadPercent);
-    this.state = "DANGER_OVERLOAD";
-    this.triggerSpark(reason, 1.5);
-    this.startSiren();
-    this.setReply(`DANGER! Heavy load reached ${this.loadPercent}%. Red siren active.`);
-  }
-
-  resetDangerLoad() {
-    this.dangerMode = false;
-    this.loadPercent = 25;
-    this.state = "APEX_LOCK";
-    this.stopSiren();
-    this.setReply("Overload cleared. Red siren stopped and system stabilized.");
-  }
-
-  addLoad(amount = 25, reason = "LOAD_SPIKE") {
-    this.loadPercent = Math.min(200, Math.max(0, this.loadPercent + Number(amount || 0)));
-    if (this.loadPercent >= 100 && !this.dangerMode) {
-      this.triggerDangerOverload(reason);
-    } else if (this.dangerMode) {
-      this.triggerSpark(reason, 1.45);
-    }
-  }
-
-  doubleAndUpgrade(reason = "2X_SELF_UPGRADE", announce = false) {
+  doubleAndUpgrade(reason = "2X_SELF_UPGRADE", announce = false, sparkIt = false) {
     this.readinessPercent = 100;
     this.upgradeStep += 1;
     const current = Number(this.evolutionPower) || this.baseHorsepower;
@@ -256,12 +230,13 @@ export class HudCanvas {
     this.humanCognitionCount = Math.min(20000000, this.humanCognitionCount * 2);
     this.humanActionPower = Math.min(20000000, this.humanActionPower * 2);
     this.animalPerceptionCount = Math.min(10000000, this.animalPerceptionCount * 2);
-    this.addLoad(14, reason);
-    this.upgradeLog = `UPGRADE #${this.upgradeStep} // LOAD:${this.loadPercent}% // ${this._formatPower(this.evolutionPower)}`;
-    this.bridgeStatus = `${this._formatPower(this.evolutionPower)} // LOAD:${this.loadPercent}% // ${this.dangerMode ? "RED SIREN" : "2X LOOP"}`;
-    this.triggerSpark(reason, this.dangerMode ? 1.5 : 1.35);
+    this.upgradeLog = `UPGRADE #${this.upgradeStep} // 20K+10K 2X // ${this._formatPower(this.evolutionPower)}`;
+    this.bridgeStatus = `${this._formatPower(this.evolutionPower)} // 20K HUMANS + 10K ANIMALS // STEP #${this.upgradeStep}`;
+    if (sparkIt) {
+      this.triggerSpark(reason, 1.2);
+    }
     if (announce) {
-      this.speak(`Upgrade ${this.upgradeStep}. Load ${this.loadPercent} percent. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
+      this.speak(`Upgrade ${this.upgradeStep}. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
     }
     return this.evolutionPower;
   }
@@ -271,8 +246,7 @@ export class HudCanvas {
     if ((Number(this.evolutionPower) || 0) < floorVal) {
       this.evolutionPower = floorVal;
     }
-    this.addLoad(45, "HEAVY_BOOST_OVERLOAD");
-    return this.doubleAndUpgrade("OVERDRIVE_2X_BOOST", true);
+    return this.doubleAndUpgrade("OVERDRIVE_2X_BOOST", true, true);
   }
 
   setReply(text, speakIt = true) {
@@ -281,8 +255,6 @@ export class HudCanvas {
     this.lastReply = clean;
     if (this._replyBox) {
       this._replyBox.textContent = `VOID-09 REPLY: ${clean}`;
-      this._replyBox.style.borderColor = this.dangerMode ? "rgba(239,68,68,0.95)" : "rgba(253,224,71,0.5)";
-      this._replyBox.style.color = this.dangerMode ? "#fca5a5" : "#fde047";
     }
     if (speakIt) {
       this.speak(clean);
@@ -293,14 +265,9 @@ export class HudCanvas {
     const q = String(promptText || "").trim();
     const low = q.toLowerCase();
 
-    if (/overload|danger|siren|heavy/i.test(low)) {
-      this.addLoad(65, "USER_OVERLOAD_COMMAND");
-      return `Load increased to ${this.loadPercent}%. ${this.dangerMode ? "Danger mode and red siren active!" : "Approaching danger threshold."}`;
-    }
-
-    if (/stop siren|reset|cool|safe/i.test(low)) {
-      this.resetDangerLoad();
-      return "Red siren stopped and system load reset to safe level.";
+    if (/danger|crash|khatra|alert|siren|threat|खतरा|क्रैश|सायरन/i.test(low)) {
+      this.triggerDangerAlert(q || "MANUAL_DANGER_COMMAND", 5000);
+      return "RED ALERT triggered! Siren active, robot turned crimson, and combat look engaged.";
     }
 
     const ollamaUrl = String(this.nodes.ollama?.url || "").trim();
@@ -322,22 +289,24 @@ export class HudCanvas {
           if (data && data.response) {
             return String(data.response).trim();
           }
+        } else if (res.status >= 500) {
+          this.triggerDangerAlert(`OLLAMA_SERVER_${res.status}`, 4500);
         }
       } catch {
-        // Fallback to instant HUD reply
+        // Local service offline: stay calm without false siren
       }
     }
 
     if (!q || /^(hi|hello|hey|namaste|नमस्ते|हेलो|हाय)$/i.test(low)) {
-      return `Hello! VOID-09 is online at ${this._formatPower(this.evolutionPower)} with load at ${this.loadPercent}%.`;
+      return `Hello! VOID-09 is online at ${this._formatPower(this.evolutionPower)}. How can I help you?`;
     }
     if (/power|hp|horse/i.test(low)) {
       return `Current power is ${this._formatPower(this.evolutionPower)} at step ${this.upgradeStep}.`;
     }
     if (/who|kaun|naam|name/i.test(low)) {
-      return "I am VOID-09, your HUD interface with voice, overload siren, and node controls.";
+      return "I am VOID-09, your HUD interface with voice, real-issue alert mode, and node controls.";
     }
-    return `Received "${q}". Load at ${this.loadPercent}% // ${this._formatPower(this.evolutionPower)}.`;
+    return `Received "${q}". VOID-09 is active at ${this._formatPower(this.evolutionPower)}.`;
   }
 
   speak(text, { pitch = 0.92, rate = 1.04, force = false } = {}) {
@@ -387,8 +356,7 @@ export class HudCanvas {
         const inputs = Array.from(document.querySelectorAll("input[type='text'], textarea"));
         const cmdInput = inputs.find((el) => !el.closest(".void09-node-drawer"));
         const query = cmdInput ? String(cmdInput.value || "").trim() : "";
-        this.addLoad(22, "EXECUTE_LOAD");
-        this.doubleAndUpgrade("EXECUTE_2X_SURGE", false);
+        this.doubleAndUpgrade("EXECUTE_2X_SURGE", false, false);
         const reply = await this._generateReply(query);
         this.setReply(reply, true);
       });
@@ -432,9 +400,8 @@ export class HudCanvas {
     });
     if (missing.length > 0) {
       const labels = missing.map((k) => this.nodes[k].label).join(" + ");
-      this.bridgeStatus = `MISSING REQUIRED: ${labels} // ${this._formatPower(this.evolutionPower)}`;
-      this.triggerSpark("REQUIRED_NODE_MISSING", 1.2);
-      this.setReply(`Missing required configuration for ${labels}.`);
+      this.bridgeStatus = `PENDING INPUT: ${labels} // ${this._formatPower(this.evolutionPower)}`;
+      this.setReply(`Enter required link/key for ${labels} to sync.`, false);
       return false;
     }
     return true;
@@ -463,7 +430,7 @@ export class HudCanvas {
     }
   }
 
-  async autoDetectAndAddNodes(silentSpark = true) {
+  async autoDetectAndAddNodes(silent = true) {
     this.bridgeStatus = `AUTO-DETECTING // ${this._formatPower(this.evolutionPower)}...`;
     const found = [];
 
@@ -496,14 +463,13 @@ export class HudCanvas {
 
     if (found.length > 0) {
       this.bridgeStatus = `DETECTED: ${found.join(" + ")} // ${this._formatPower(this.evolutionPower)}`;
-      if (!silentSpark) {
-        this.setReply(`Detected ${found.join(" and ")}.`);
+      if (!silent) {
+        this.setReply(`Detected ${found.join(" and ")}.`, true);
       }
     } else {
-      this.bridgeStatus = `100% // ${this._formatPower(this.evolutionPower)} // LOAD:${this.loadPercent}%`;
-      if (!silentSpark) {
-        this.triggerSpark("AUTO_DETECT_NONE", 1.0);
-        this.setReply("Scan complete. Enter required API keys for OpenClaw, Mythos, and Grok.");
+      this.bridgeStatus = `100% // ${this._formatPower(this.evolutionPower)} // 20K HUMANS + 10K ANIMALS`;
+      if (!silent) {
+        this.setReply("Scan complete. Local services offline; enter API keys for OpenClaw, Mythos, and Grok.", false);
       }
     }
     return found;
@@ -524,15 +490,13 @@ export class HudCanvas {
     if (!node.url || !String(node.url).trim()) {
       node.status = "LINK_REQUIRED";
       this.bridgeStatus = `${node.label} LINK REQUIRED // ${this._formatPower(this.evolutionPower)}`;
-      this.triggerSpark(`${node.label}_LINK_REQUIRED`, 1.1);
-      this.setReply(`${node.label} link required.`);
+      this.setReply(`${node.label} link is empty.`, false);
       return false;
     }
     if (node.keyRequired && (!node.apiKey || !String(node.apiKey).trim())) {
       node.status = "KEY_REQUIRED";
       this.bridgeStatus = `${node.label} API KEY REQUIRED // ${this._formatPower(this.evolutionPower)}`;
-      this.triggerSpark(`${node.label}_KEY_REQUIRED`, 1.15);
-      this.setReply(`${node.label} API key required.`);
+      this.setReply(`${node.label} API key not entered yet.`, false);
       return false;
     }
 
@@ -543,16 +507,15 @@ export class HudCanvas {
     const ok = await this._probeUrl(node.url, node.apiKey, 1800);
     if (ok) {
       node.status = "LINKED";
-      this.doubleAndUpgrade(`${node.label}_LINKED_2X`, false);
+      this.doubleAndUpgrade(`${node.label}_LINKED_2X`, false, false);
       this.bridgeStatus = `${node.label} LINKED // ${this._formatPower(this.evolutionPower)}`;
-      this.setReply(`${node.label} linked. Power doubled to ${this._formatPower(this.evolutionPower)}.`);
+      this.setReply(`${node.label} linked. Power doubled to ${this._formatPower(this.evolutionPower)}.`, true);
       return true;
     }
 
     node.status = node.keyRequired ? "OFFLINE/LOCAL" : "LOCAL_RUN";
     this.bridgeStatus = `${node.label} UNREACHABLE // ${this._formatPower(this.evolutionPower)}`;
-    this.triggerSpark(`${node.label}_LINK_FAULT`, 1.1);
-    this.setReply(`${node.label} unreachable. Check link or key.`);
+    this.setReply(`${node.label} is not reachable right now.`, false);
     return false;
   }
 
@@ -567,28 +530,32 @@ export class HudCanvas {
       this.pingNode("mythos"),
       this.pingNode("grok")
     ]);
-    this.doubleAndUpgrade("ALL_NODES_SYNC_2X", false);
+    this.doubleAndUpgrade("ALL_NODES_SYNC_2X", false, false);
     this.activeNode = "OLLAMA+OPENCLAW+MYTHOS+GROK";
     this.bridgeStatus = `${this._formatPower(this.evolutionPower)} | OL:${this.nodes.ollama.status} | OC:${this.nodes.openclaw.status} | MY:${this.nodes.mythos.status} | GK:${this.nodes.grok.status}`;
-    this.setReply(`All nodes synchronized. Power at ${this._formatPower(this.evolutionPower)}.`);
+    this.setReply(`All nodes checked. Power at ${this._formatPower(this.evolutionPower)}.`, true);
     return true;
   }
 
   _bindGlobalErrors() {
-    window.addEventListener("error", () => {
-      this.triggerSpark("RUNTIME_ERROR", 1.25);
+    window.addEventListener("error", (ev) => {
+      const msg = ev && ev.message ? String(ev.message) : "RUNTIME_CRASH";
+      if (this._isExpectedOfflineOrAuthNoise(msg)) return;
+      this.triggerDangerAlert(msg, 5000);
     });
-    window.addEventListener("unhandledrejection", () => {
-      this.triggerSpark("PROMISE_ERROR", 1.2);
+    window.addEventListener("unhandledrejection", (ev) => {
+      const reason = ev && ev.reason ? String(ev.reason.message || ev.reason) : "UNHANDLED_REJECTION";
+      if (this._isExpectedOfflineOrAuthNoise(reason)) return;
+      this.triggerDangerAlert(reason, 5000);
     });
   }
 
-  triggerSpark(reason = "SYSTEM_ERROR", power = 1.15) {
+  triggerSpark(reason = "EVENT", power = 1.1) {
     const now = performance.now();
-    if (now - this.lastErrorSparkAt < 240 && this.sparkIntensity > 0.5) return;
+    if (now - this.lastErrorSparkAt < 300 && this.sparkIntensity > 0.5) return;
     this.lastErrorSparkAt = now;
-    this.sparkReason = String(reason || "SYSTEM_ERROR");
-    this.sparkIntensity = Math.min(1.6, Math.max(this.sparkIntensity, power));
+    this.sparkReason = String(reason || "EVENT");
+    this.sparkIntensity = Math.min(1.4, Math.max(this.sparkIntensity, power));
 
     const rect = this.canvas ? this.canvas.getBoundingClientRect() : { width: 640, height: 320 };
     const w = Math.max(300, rect.width || 640);
@@ -596,45 +563,45 @@ export class HudCanvas {
     const cx = w * 0.5;
     const cy = h * 0.42;
 
-    const count = Math.floor(45 * power);
+    const count = Math.floor(32 * power);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = (2.5 + Math.random() * 9.5) * power;
+      const speed = (2.0 + Math.random() * 8.0) * power;
       const hot = Math.random();
       const color =
-        hot > 0.7 ? "#ffffff" :
-        hot > 0.38 ? "#ffea54" :
-        hot > 0.14 ? "#ff4d29" : "#ff1e42";
+        hot > 0.7 ? "#ff3b3b" :
+        hot > 0.38 ? "#ff1e42" :
+        hot > 0.14 ? "#ff5e3a" : "#ffea54";
       this.sparks.push({
-        x: cx + (Math.random() - 0.5) * 44,
-        y: cy + (Math.random() - 0.5) * 34,
+        x: cx + (Math.random() - 0.5) * 40,
+        y: cy + (Math.random() - 0.5) * 30,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 1.3,
+        vy: Math.sin(angle) * speed - 1.2,
         life: 1,
-        decay: 0.022 + Math.random() * 0.028,
-        size: 1.6 + Math.random() * 2.9,
+        decay: 0.025 + Math.random() * 0.028,
+        size: 1.5 + Math.random() * 2.6,
         color
       });
     }
 
-    const arcCount = Math.floor(7 * power);
+    const arcCount = Math.floor(5 * power);
     this.arcs = [];
     for (let a = 0; a < arcCount; a++) {
       const targetAngle = Math.random() * Math.PI * 2;
-      const dist = (45 + Math.random() * Math.min(w, h) * 0.38) * power;
+      const dist = (40 + Math.random() * Math.min(w, h) * 0.34) * power;
       const ex = Math.max(12, Math.min(w - 12, cx + Math.cos(targetAngle) * dist));
       const ey = Math.max(12, Math.min(h - 12, cy + Math.sin(targetAngle) * dist));
       const pts = [{ x: cx, y: cy }];
-      const segs = 6;
+      const segs = 5;
       for (let s = 1; s < segs; s++) {
         const t = s / segs;
         pts.push({
-          x: cx + (ex - cx) * t + (Math.random() - 0.5) * 28,
-          y: cy + (ey - cy) * t + (Math.random() - 0.5) * 28
+          x: cx + (ex - cx) * t + (Math.random() - 0.5) * 24,
+          y: cy + (ey - cy) * t + (Math.random() - 0.5) * 24
         });
       }
       pts.push({ x: ex, y: ey });
-      this.arcs.push({ pts, life: 1, decay: 0.075 + Math.random() * 0.05 });
+      this.arcs.push({ pts, life: 1, decay: 0.08 + Math.random() * 0.05 });
     }
   }
 
@@ -690,13 +657,28 @@ export class HudCanvas {
       if (this.scannerActive) {
         this.stopScanner();
         btn.textContent = "SCAN FACE & EYES";
-        this.setReply("Scanner stopped.");
+        this.setReply("Scanner stopped.", false);
       } else {
         this.startScanner().then((ok) => {
           btn.textContent = ok ? "STOP SCAN" : "SCAN FACE & EYES";
-          if (ok) this.setReply("Optic scanner online. Tracking face and eyes.");
+          if (ok) this.setReply("Optic scanner online. Tracking face and eyes.", false);
         });
       }
+    });
+
+    const sirenBtn = document.createElement("button");
+    sirenBtn.type = "button";
+    sirenBtn.textContent = "SIREN ALERT";
+    sirenBtn.style.cssText = [
+      "background:rgba(153,27,27,0.95)",
+      "color:#fecaca",
+      "border:1px solid rgba(255,75,75,0.85)",
+      "padding:4px 7px",
+      "cursor:pointer",
+      "text-transform:uppercase"
+    ].join(";");
+    sirenBtn.addEventListener("click", () => {
+      this.triggerDangerAlert("MANUAL_TEST_ALERT", 5000);
     });
 
     const voiceBtn = document.createElement("button");
@@ -716,27 +698,6 @@ export class HudCanvas {
       voiceBtn.style.color = this.voiceEnabled ? "#86efac" : "#f87171";
       if (this.voiceEnabled) {
         this.speak("Robot voice activated.", { force: true });
-      }
-    });
-
-    const sirenBtn = document.createElement("button");
-    sirenBtn.type = "button";
-    sirenBtn.textContent = "TEST RED SIREN";
-    sirenBtn.style.cssText = [
-      "background:rgba(15,23,42,0.92)",
-      "color:#fca5a5",
-      "border:1px solid rgba(248,113,113,0.75)",
-      "padding:4px 7px",
-      "cursor:pointer",
-      "text-transform:uppercase"
-    ].join(";");
-    this._sirenBtn = sirenBtn;
-    sirenBtn.addEventListener("click", () => {
-      if (this.dangerMode) {
-        this.resetDangerLoad();
-      } else {
-        this.loadPercent = 100;
-        this.triggerDangerOverload("MANUAL_RED_SIREN");
       }
     });
 
@@ -915,8 +876,8 @@ export class HudCanvas {
     this._replyBox = replyBar;
 
     bar.appendChild(btn);
-    bar.appendChild(voiceBtn);
     bar.appendChild(sirenBtn);
+    bar.appendChild(voiceBtn);
     bar.appendChild(linksToggleBtn);
     bar.appendChild(makeLinkBtn("OLLAMA", "ollama"));
     bar.appendChild(makeLinkBtn("OPENCLAW", "openclaw"));
@@ -931,7 +892,7 @@ export class HudCanvas {
   async startScanner() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       this.scannerStatus = "CAM API UNAVAILABLE";
-      this.triggerSpark("CAM_API_ERROR", 1.15);
+      this.triggerDangerAlert("CAM_API_ERROR", 4000);
       return false;
     }
     try {
@@ -949,9 +910,8 @@ export class HudCanvas {
       this.scannerStatus = "SIDE CAM LIVE // TRACKING FACE & MOTION";
       return true;
     } catch {
-      this.scannerStatus = "CAM PERMISSION DENIED / OFFLINE";
+      this.scannerStatus = "CAM STANDBY (PERMISSION NOT GRANTED)";
       this.scannerActive = false;
-      this.triggerSpark("CAM_PERMISSION_ERROR", 1.2);
       return false;
     }
   }
@@ -1065,12 +1025,12 @@ export class HudCanvas {
   _updateSelfEvolution(now) {
     if (now - this.lastUpgradeAt >= 2500) {
       this.lastUpgradeAt = now;
-      this.doubleAndUpgrade("AUTO_2X_UPGRADE", false);
+      this.doubleAndUpgrade("AUTO_2X_UPGRADE", false, false);
     }
   }
 
   _updateSparks() {
-    this.sparkIntensity = Math.max(0, this.sparkIntensity - 0.022);
+    this.sparkIntensity = Math.max(0, this.sparkIntensity - 0.025);
     for (let i = this.sparks.length - 1; i >= 0; i--) {
       const p = this.sparks[i];
       p.x += p.vx;
@@ -1095,7 +1055,6 @@ export class HudCanvas {
 
   stop() {
     this.running = false;
-    this.stopSiren();
     this.stopScanner();
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
@@ -1117,8 +1076,8 @@ export class HudCanvas {
     if (!newState) return;
     this.state = newState;
     const upper = String(newState).toUpperCase();
-    if (upper.includes("ERROR") || upper.includes("FAIL") || upper.includes("CRITICAL") || upper.includes("FAULT")) {
-      this.triggerSpark(`STATE_${upper}`, 1.25);
+    if (upper.includes("CRITICAL") || upper.includes("CRASH") || upper.includes("FATAL")) {
+      this.triggerDangerAlert(`STATE_${upper}`, 4500);
     }
   }
 
@@ -1136,12 +1095,17 @@ export class HudCanvas {
   }
 
   _drawRobotPane(ctx, now, rx, ry, rw, rh) {
+    const danger = this.isDangerActive(now);
+    if (danger) {
+      this._playSiren();
+    }
+
     ctx.save();
     ctx.beginPath();
     ctx.rect(rx, ry, rw, rh);
     ctx.clip();
 
-    ctx.fillStyle = "#05070d";
+    ctx.fillStyle = danger ? "#140406" : "#05070d";
     ctx.fillRect(rx, ry, rw, rh);
 
     const normX = Math.max(-1, Math.min(1, this.gazeX));
@@ -1149,100 +1113,108 @@ export class HudCanvas {
     const cx = rx + rw * 0.5 + normX * 14;
     const cy = ry + rh * 0.46 + normY * 10;
     const unit = Math.min(rw, rh);
-    const speakPulse = this.voiceSpeaking ? (0.85 + 0.35 * Math.abs(Math.sin(now * 0.025))) : 1;
-    const sirenFlash = this.dangerMode ? (0.5 + 0.5 * Math.sin(now * 0.02)) : 0;
+    const sirenWave = danger ? (0.85 + 0.35 * Math.abs(Math.sin(now * 0.022))) : 1;
 
-    const aura = ctx.createRadialGradient(cx, cy - unit * 0.04, unit * 0.04, cx, cy, unit * 0.58 * speakPulse);
-    aura.addColorStop(0, this.dangerMode ? `rgba(255, 25, 25, ${0.45 + 0.35 * sirenFlash})` : "rgba(255, 55, 55, 0.45)");
-    aura.addColorStop(0.55, "rgba(253, 224, 71, 0.14)");
-    aura.addColorStop(1, "rgba(5, 7, 13, 0)");
+    const aura = ctx.createRadialGradient(cx, cy - unit * 0.04, unit * 0.04, cx, cy, unit * 0.62 * sirenWave);
+    if (danger) {
+      aura.addColorStop(0, "rgba(255, 24, 24, 0.68)");
+      aura.addColorStop(0.55, "rgba(185, 28, 28, 0.28)");
+      aura.addColorStop(1, "rgba(20, 4, 6, 0)");
+    } else {
+      aura.addColorStop(0, "rgba(255, 55, 55, 0.38)");
+      aura.addColorStop(0.55, "rgba(253, 224, 71, 0.12)");
+      aura.addColorStop(1, "rgba(5, 7, 13, 0)");
+    }
     ctx.fillStyle = aura;
     ctx.fillRect(rx, ry, rw, rh);
 
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate((now * 0.0018) % (Math.PI * 2));
-    ctx.strokeStyle = this.dangerMode ? "rgba(255, 45, 45, 0.88)" : "rgba(255, 85, 85, 0.65)";
-    ctx.lineWidth = 1.7;
-    ctx.setLineDash([14, 7]);
+    ctx.rotate((now * (danger ? 0.0045 : 0.0016)) % (Math.PI * 2));
+    ctx.strokeStyle = danger ? "rgba(255, 45, 45, 0.92)" : "rgba(255, 85, 85, 0.58)";
+    ctx.lineWidth = danger ? 2.2 : 1.6;
+    ctx.setLineDash(danger ? [10, 4] : [14, 7]);
     ctx.beginPath();
-    ctx.arc(0, 0, unit * 0.35 * speakPulse, 0, Math.PI * 2);
+    ctx.arc(0, 0, unit * 0.35 * sirenWave, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
 
+    const headW = unit * (danger ? 0.38 : 0.34);
+    const headH = unit * (danger ? 0.45 : 0.42);
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate((-now * 0.0028) % (Math.PI * 2));
-    ctx.strokeStyle = this.dangerMode ? "rgba(255, 30, 30, 0.82)" : "rgba(253, 224, 71, 0.6)";
-    ctx.lineWidth = 1.3;
-    ctx.setLineDash([6, 5]);
-    ctx.beginPath();
-    ctx.arc(0, 0, unit * 0.40, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
+    ctx.fillStyle = danger ? "#240609" : "#0c0f18";
+    ctx.strokeStyle = danger ? "#ff2424" : (this.voiceSpeaking ? "rgba(253, 224, 71, 0.98)" : "rgba(248, 113, 113, 0.9)");
+    ctx.lineWidth = danger ? 2.5 : 2.0;
 
-    const headW = unit * 0.34;
-    const headH = unit * 0.42;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.fillStyle = "#0c0f18";
-    ctx.strokeStyle = this.dangerMode ? "rgba(255, 35, 35, 0.98)" : (this.voiceSpeaking ? "rgba(253, 224, 71, 0.98)" : "rgba(248, 113, 113, 0.92)");
-    ctx.lineWidth = 2.0;
-
-    ctx.beginPath();
-    ctx.moveTo(0, -headH * 0.62);
-    ctx.lineTo(headW * 0.58, -headH * 0.25);
-    ctx.lineTo(headW * 0.46, headH * 0.22);
-    ctx.lineTo(headW * 0.22, headH * 0.58);
-    ctx.lineTo(-headW * 0.22, headH * 0.58);
-    ctx.lineTo(-headW * 0.46, headH * 0.22);
-    ctx.lineTo(-headW * 0.58, -headH * 0.25);
-    ctx.closePath();
+    if (danger) {
+      ctx.beginPath();
+      ctx.moveTo(0, -headH * 0.72);
+      ctx.lineTo(headW * 0.42, -headH * 0.42);
+      ctx.lineTo(headW * 0.72, -headH * 0.18);
+      ctx.lineTo(headW * 0.50, headH * 0.26);
+      ctx.lineTo(headW * 0.24, headH * 0.62);
+      ctx.lineTo(-headW * 0.24, headH * 0.62);
+      ctx.lineTo(-headW * 0.50, headH * 0.26);
+      ctx.lineTo(-headW * 0.72, -headH * 0.18);
+      ctx.lineTo(-headW * 0.42, -headH * 0.42);
+      ctx.closePath();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(0, -headH * 0.62);
+      ctx.lineTo(headW * 0.58, -headH * 0.25);
+      ctx.lineTo(headW * 0.46, headH * 0.22);
+      ctx.lineTo(headW * 0.22, headH * 0.58);
+      ctx.lineTo(-headW * 0.22, headH * 0.58);
+      ctx.lineTo(-headW * 0.46, headH * 0.22);
+      ctx.lineTo(-headW * 0.58, -headH * 0.25);
+      ctx.closePath();
+    }
     ctx.fill();
     ctx.stroke();
 
-    ctx.strokeStyle = "rgba(255, 75, 75, 0.68)";
-    ctx.lineWidth = 1.3;
+    ctx.strokeStyle = danger ? "#ff3838" : "rgba(255, 75, 75, 0.65)";
+    ctx.lineWidth = danger ? 1.8 : 1.3;
     ctx.beginPath();
-    ctx.moveTo(-headW * 0.44, -headH * 0.14);
-    ctx.lineTo(0, -headH * 0.02);
-    ctx.lineTo(headW * 0.44, -headH * 0.14);
+    ctx.moveTo(-headW * 0.48, -headH * 0.16);
+    ctx.lineTo(0, danger ? headH * 0.04 : -headH * 0.02);
+    ctx.lineTo(headW * 0.48, -headH * 0.16);
     ctx.stroke();
 
     const eyeY = -headH * 0.04;
     const eyeDx = headW * 0.24;
-    const eyeW = headW * 0.18;
-    const eyeH = headH * 0.08;
+    const eyeW = headW * (danger ? 0.21 : 0.18);
+    const eyeH = headH * (danger ? 0.11 : 0.08);
     const blinkAmt = this.blinkProgress > 0
       ? (this.blinkProgress <= 1 ? this.blinkProgress : 2 - this.blinkProgress)
       : 0;
-    const openFactor = Math.max(0.08, 1 - blinkAmt);
+    const openFactor = danger ? 1 : Math.max(0.08, 1 - blinkAmt);
 
-    const pulse = 0.8 + 0.2 * Math.sin(now * 0.01);
-    ctx.fillStyle = this.dangerMode ? `rgba(255, 25, 25, ${pulse})` : (this.voiceSpeaking ? `rgba(253, 224, 71, ${pulse})` : `rgba(255, 50, 50, ${pulse})`);
-    ctx.shadowColor = this.dangerMode ? "#ff1111" : (this.voiceSpeaking ? "#fde047" : "#ff2a2a");
-    ctx.shadowBlur = 14;
+    const pulse = 0.82 + 0.18 * Math.sin(now * (danger ? 0.025 : 0.01));
+    ctx.fillStyle = danger ? `rgba(255, 24, 24, ${pulse})` : (this.voiceSpeaking ? `rgba(253, 224, 71, ${pulse})` : `rgba(255, 50, 50, ${pulse})`);
+    ctx.shadowColor = danger ? "#ff1414" : (this.voiceSpeaking ? "#fde047" : "#ff2a2a");
+    ctx.shadowBlur = danger ? 18 : 13;
 
     ctx.beginPath();
-    ctx.moveTo(-eyeDx - eyeW * 0.5, eyeY);
-    ctx.lineTo(-eyeDx + eyeW * 0.5, eyeY - eyeH * 0.5 * openFactor);
-    ctx.lineTo(-eyeDx + eyeW * 0.35, eyeY + eyeH * 0.5 * openFactor);
+    ctx.moveTo(-eyeDx - eyeW * 0.5, eyeY - (danger ? 2 : 0));
+    ctx.lineTo(-eyeDx + eyeW * 0.5, eyeY - eyeH * 0.55 * openFactor);
+    ctx.lineTo(-eyeDx + eyeW * 0.35, eyeY + eyeH * 0.55 * openFactor);
     ctx.closePath();
     ctx.fill();
 
     ctx.beginPath();
-    ctx.moveTo(eyeDx + eyeW * 0.5, eyeY);
-    ctx.lineTo(eyeDx - eyeW * 0.5, eyeY - eyeH * 0.5 * openFactor);
-    ctx.lineTo(eyeDx - eyeW * 0.35, eyeY + eyeH * 0.5 * openFactor);
+    ctx.moveTo(eyeDx + eyeW * 0.5, eyeY - (danger ? 2 : 0));
+    ctx.lineTo(eyeDx - eyeW * 0.5, eyeY - eyeH * 0.55 * openFactor);
+    ctx.lineTo(eyeDx - eyeW * 0.35, eyeY + eyeH * 0.55 * openFactor);
     ctx.closePath();
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    ctx.strokeStyle = this.dangerMode ? "rgba(255, 50, 50, 0.9)" : (this.voiceSpeaking ? "rgba(253, 224, 71, 0.85)" : "rgba(252, 165, 165, 0.5)");
-    ctx.lineWidth = 1.3;
+    ctx.strokeStyle = danger ? "#ff4545" : (this.voiceSpeaking ? "rgba(253, 224, 71, 0.85)" : "rgba(252, 165, 165, 0.5)");
+    ctx.lineWidth = danger ? 1.6 : 1.3;
     for (let g = 0; g < 3; g++) {
       const gy = headH * (0.24 + g * 0.09);
-      const wave = this.voiceSpeaking ? Math.sin(now * 0.025 + g) * 4 : 0;
+      const wave = danger ? Math.sin(now * 0.03 + g) * 5 : (this.voiceSpeaking ? Math.sin(now * 0.025 + g) * 4 : 0);
       const gw = headW * (0.22 - g * 0.03) + wave;
       ctx.beginPath();
       ctx.moveTo(-gw, gy);
@@ -1252,21 +1224,22 @@ export class HudCanvas {
 
     ctx.restore();
 
-    ctx.fillStyle = this.dangerMode ? "rgba(255, 70, 70, 0.98)" : "rgba(253, 224, 71, 0.95)";
+    ctx.fillStyle = danger ? "#ff4d4d" : "rgba(253, 224, 71, 0.95)";
     ctx.font = "10px monospace";
-    const voiceTag = this.dangerMode ? " // 🚨 RED SIREN" : (this.voiceSpeaking ? " // 🔊 SPEAKING" : (this.voiceEnabled ? " // VOICE:ON" : " // VOICE:OFF"));
-    ctx.fillText(`CORE // LOAD:${this.loadPercent}% // ${this._formatPower(this.evolutionPower)}${voiceTag}`, rx + 10, ry + 18);
+    const modeLabel = danger ? " // 🚨 REAL ALERT + COMBAT LOOK" : (this.voiceSpeaking ? " // 🔊 SPEAKING" : "");
+    ctx.fillText(`CORE // ${this._formatPower(this.evolutionPower)}${modeLabel}`, rx + 10, ry + 18);
 
     ctx.restore();
   }
 
   _drawCameraPane(ctx, now, cx, cy, cw, ch) {
+    const danger = this.isDangerActive(now);
     ctx.save();
     ctx.beginPath();
     ctx.rect(cx, cy, cw, ch);
     ctx.clip();
 
-    ctx.fillStyle = "#06080f";
+    ctx.fillStyle = danger ? "#140406" : "#06080f";
     ctx.fillRect(cx, cy, cw, ch);
 
     const liveCamReady = this.scannerActive && this.videoEl && this.videoEl.readyState >= 2;
@@ -1286,7 +1259,7 @@ export class HudCanvas {
       ctx.drawImage(this.videoEl, dx, dy, dw, dh);
       ctx.restore();
 
-      ctx.fillStyle = "rgba(185, 28, 28, 0.08)";
+      ctx.fillStyle = danger ? "rgba(220, 38, 38, 0.24)" : "rgba(185, 28, 28, 0.08)";
       ctx.fillRect(cx, cy, cw, ch);
 
       const sf = this.smoothFace;
@@ -1302,48 +1275,44 @@ export class HudCanvas {
       const leftBox = fx - fw * 0.5;
       const topBox = fy - fh * 0.5;
 
-      ctx.strokeStyle = "rgba(255, 75, 75, 0.95)";
-      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = danger ? "#ff2424" : "rgba(255, 75, 75, 0.95)";
+      ctx.lineWidth = danger ? 2.2 : 1.6;
       ctx.strokeRect(leftBox, topBox, fw, fh);
-
-      ctx.strokeStyle = "rgba(253, 224, 71, 0.78)";
-      ctx.lineWidth = 1.2;
-      ctx.strokeRect(leftBox - 5, topBox - 5, fw + 10, fh + 10);
 
       const leftEyeX = fx - fw * 0.22;
       const rightEyeX = fx + fw * 0.22;
       const scanEyeY = fy - fh * 0.12;
 
-      ctx.strokeStyle = "rgba(254, 240, 138, 0.95)";
+      ctx.strokeStyle = danger ? "#ff4d4d" : "rgba(254, 240, 138, 0.95)";
       ctx.lineWidth = 1.3;
       ctx.strokeRect(leftEyeX - 10, scanEyeY - 6, 20, 12);
       ctx.strokeRect(rightEyeX - 10, scanEyeY - 6, 20, 12);
 
-      ctx.fillStyle = "#ff3b3b";
+      ctx.fillStyle = "#ff2424";
       ctx.beginPath();
       ctx.arc(leftEyeX, scanEyeY, 2, 0, Math.PI * 2);
       ctx.arc(rightEyeX, scanEyeY, 2, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = "rgba(254, 202, 202, 0.98)";
+      ctx.fillStyle = danger ? "#ff6b6b" : "rgba(254, 202, 202, 0.98)";
       ctx.font = "10px monospace";
-      ctx.fillText("FACE + EYES LOCKED", leftBox, Math.max(cy + 26, topBox - 5));
+      ctx.fillText(danger ? "ALERT LOCKED" : "FACE + EYES LOCKED", leftBox, Math.max(cy + 26, topBox - 5));
     } else {
-      ctx.strokeStyle = "rgba(239, 68, 68, 0.28)";
+      ctx.strokeStyle = danger ? "rgba(255, 36, 36, 0.7)" : "rgba(239, 68, 68, 0.28)";
       ctx.strokeRect(cx + 12, cy + 28, cw - 24, ch - 40);
-      ctx.fillStyle = "rgba(252, 165, 165, 0.9)";
+      ctx.fillStyle = danger ? "#ff6b6b" : "rgba(252, 165, 165, 0.9)";
       ctx.font = "11px monospace";
-      ctx.fillText("CAM STANDBY", cx + 18, cy + ch * 0.48);
-      ctx.fillStyle = "rgba(253, 224, 71, 0.8)";
+      ctx.fillText(danger ? "SIREN RED STANDBY" : "CAM STANDBY", cx + 18, cy + ch * 0.48);
+      ctx.fillStyle = danger ? "#ff9999" : "rgba(253, 224, 71, 0.8)";
       ctx.font = "10px monospace";
       ctx.fillText("CLICK [SCAN FACE & EYES]", cx + 18, cy + ch * 0.48 + 16);
     }
 
-    const beamY = cy + ((now * 0.11) % Math.max(1, ch));
-    ctx.fillStyle = "rgba(255, 75, 75, 0.25)";
+    const beamY = cy + ((now * (danger ? 0.22 : 0.11)) % Math.max(1, ch));
+    ctx.fillStyle = danger ? "rgba(255, 30, 30, 0.45)" : "rgba(255, 75, 75, 0.25)";
     ctx.fillRect(cx, beamY, cw, 2);
 
-    ctx.fillStyle = "rgba(252, 165, 165, 0.88)";
+    ctx.fillStyle = danger ? "#ff6b6b" : "rgba(252, 165, 165, 0.88)";
     ctx.font = "10px monospace";
     ctx.fillText("OPTIC // CAM", cx + 10, cy + 18);
 
@@ -1352,6 +1321,7 @@ export class HudCanvas {
 
   draw(now = performance.now()) {
     if (!this.canvas || !this.ctx) return;
+    const danger = this.isDangerActive(now);
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const rect = this.canvas.getBoundingClientRect();
     const width = Math.max(300, Math.floor(rect.width || this.canvas.clientWidth || 640));
@@ -1373,11 +1343,12 @@ export class HudCanvas {
     this._updateSmoothFace();
     this._updateSparks();
 
-    const shakeX = this.sparkIntensity > 0 ? (Math.random() - 0.5) * 10 * this.sparkIntensity : 0;
-    const shakeY = this.sparkIntensity > 0 ? (Math.random() - 0.5) * 8 * this.sparkIntensity : 0;
+    const shakeMult = danger ? 1.25 : 1;
+    const shakeX = this.sparkIntensity > 0 ? (Math.random() - 0.5) * 8 * this.sparkIntensity * shakeMult : 0;
+    const shakeY = this.sparkIntensity > 0 ? (Math.random() - 0.5) * 6 * this.sparkIntensity * shakeMult : 0;
     ctx.translate(shakeX, shakeY);
 
-    ctx.fillStyle = "#040509";
+    ctx.fillStyle = danger ? "#120305" : "#040509";
     ctx.fillRect(-12, -12, width + 24, height + 24);
 
     const pad = 6;
@@ -1392,8 +1363,8 @@ export class HudCanvas {
       this._drawRobotPane(ctx, now, pad, pad, paneW, paneH);
       this._drawCameraPane(ctx, now, pad + paneW + gap, pad, boxW - paneW - gap, paneH);
 
-      ctx.strokeStyle = this.dangerMode ? "rgba(255, 35, 35, 0.9)" : "rgba(248, 113, 113, 0.65)";
-      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = danger ? "#ff2424" : "rgba(248, 113, 113, 0.65)";
+      ctx.lineWidth = danger ? 2.2 : 1.6;
       ctx.beginPath();
       ctx.moveTo(pad + paneW + gap * 0.5, pad + 6);
       ctx.lineTo(pad + paneW + gap * 0.5, pad + paneH - 6);
@@ -1404,22 +1375,22 @@ export class HudCanvas {
       this._drawCameraPane(ctx, now, pad, pad + paneH + gap, boxW, boxH - paneH - gap);
     }
 
-    if (this.dangerMode) {
-      const flashAlpha = 0.12 + 0.14 * Math.abs(Math.sin(now * 0.018));
+    if (danger) {
+      const flashAlpha = 0.14 + 0.14 * Math.abs(Math.sin(now * 0.022));
       ctx.fillStyle = `rgba(255, 20, 20, ${flashAlpha})`;
       ctx.fillRect(pad, pad, boxW, boxH);
     } else if (this.sparkIntensity > 0.05) {
-      ctx.fillStyle = `rgba(255, 60, 30, ${Math.min(0.25, this.sparkIntensity * 0.18)})`;
+      ctx.fillStyle = `rgba(255, 60, 30, ${Math.min(0.2, this.sparkIntensity * 0.14)})`;
       ctx.fillRect(pad, pad, boxW, boxH);
     }
 
     for (const arc of this.arcs) {
       ctx.save();
       ctx.globalAlpha = Math.max(0, Math.min(1, arc.life));
-      ctx.strokeStyle = this.dangerMode ? "#ff3b3b" : "#fde047";
-      ctx.lineWidth = 2.6;
-      ctx.shadowColor = "#ff3b1f";
-      ctx.shadowBlur = 14;
+      ctx.strokeStyle = danger ? "#ff2a2a" : "#fde047";
+      ctx.lineWidth = 2.4;
+      ctx.shadowColor = "#ff2424";
+      ctx.shadowBlur = 12;
       ctx.beginPath();
       arc.pts.forEach((pt, idx) => {
         if (idx === 0) ctx.moveTo(pt.x, pt.y);
@@ -1434,7 +1405,7 @@ export class HudCanvas {
       ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
       ctx.fillStyle = p.color;
       ctx.shadowColor = p.color;
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = 10;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
       ctx.fill();
@@ -1442,8 +1413,8 @@ export class HudCanvas {
     }
 
     const bLen = 18;
-    ctx.strokeStyle = this.dangerMode ? "rgba(255, 30, 30, 0.98)" : (this.sparkIntensity > 0.2 ? "rgba(253, 224, 71, 0.98)" : "rgba(248, 113, 113, 0.95)");
-    ctx.lineWidth = this.dangerMode ? 3.0 : 2.2;
+    ctx.strokeStyle = danger ? "#ff2424" : (this.sparkIntensity > 0.2 ? "rgba(253, 224, 71, 0.98)" : "rgba(248, 113, 113, 0.95)");
+    ctx.lineWidth = danger ? 2.6 : 2.2;
     ctx.beginPath();
     ctx.moveTo(pad + 4, pad + 4 + bLen);
     ctx.lineTo(pad + 4, pad + 4);
@@ -1462,14 +1433,14 @@ export class HudCanvas {
     ctx.lineTo(width - pad - 4, height - pad - 4 - bLen);
     ctx.stroke();
 
-    ctx.fillStyle = "rgba(4, 6, 12, 0.88)";
+    ctx.fillStyle = danger ? "rgba(38, 5, 8, 0.92)" : "rgba(4, 6, 12, 0.88)";
     ctx.fillRect(pad + 4, height - pad - 34, boxW - 8, 30);
 
-    ctx.fillStyle = this.dangerMode ? "rgba(255, 65, 65, 0.98)" : "rgba(253, 224, 71, 0.96)";
+    ctx.fillStyle = danger ? "#ff5252" : "rgba(253, 224, 71, 0.96)";
     ctx.font = "11px monospace";
-    const dangerTag = this.dangerMode ? " // 🚨 DANGER OVERLOAD" : (this.sparkIntensity > 0.1 ? ` // ⚡ ${this.sparkReason}` : "");
-    ctx.fillText(`VOID-09 LOAD:${this.loadPercent}% (STEP #${this.upgradeStep} // ${this._formatPower(this.evolutionPower)}) // ${this.state}${dangerTag}`, pad + 12, height - pad - 21);
-    ctx.fillStyle = "rgba(252, 165, 165, 0.9)";
+    const alertTag = danger ? ` // 🚨 SIREN: ${this.dangerReason}` : (this.sparkIntensity > 0.1 ? ` // ⚡ ${this.sparkReason}` : "");
+    ctx.fillText(`VOID-09 ${this.readinessPercent}% (STEP #${this.upgradeStep} // ${this._formatPower(this.evolutionPower)}) // ${danger ? "RED_ALERT" : this.state}${alertTag}`, pad + 12, height - pad - 21);
+    ctx.fillStyle = danger ? "#ff9999" : "rgba(252, 165, 165, 0.9)";
     ctx.font = "10px monospace";
     ctx.fillText(`${this.bridgeStatus} | ${this.scannerStatus}`, pad + 12, height - pad - 8);
 
